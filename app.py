@@ -2,7 +2,7 @@ r"""
 Open Access Consumers & Billing Revenue Analysis Dashboard
 A high-performance, executive dashboard conforming strictly to Universal Agent Rules (global.md):
 - Rule #6: Summary Hyperlinks & Strict 1:1 Data Parity
-- Rule #7: Contextual Dropdown Filters with Checkboxes ABOVE Summaries (Excel AutoFilter Semantics)
+- Rule #7: Contextual Dropdown Filters with Checkboxes ABOVE Summaries (Excel AutoFilter Semantics for all 22 Dimensions)
 - Rule #8: Indian Number Formatting (1,00,000, 10,00,000, 1,00,00,000)
 - Rule #4: Pure Authentic Portal Data (Strict Zero Synthetic Data Policy)
 """
@@ -59,9 +59,9 @@ st.set_page_config(
 # ----------------- REFINED EXECUTIVE STYLING -----------------
 st.markdown("""
 <style>
-    /* Global Background and Typography */
+    /* Global Layout Constraints */
     .main .block-container {
-        padding-top: 1.5rem;
+        padding-top: 1.2rem;
         padding-bottom: 2rem;
         max-width: 98%;
     }
@@ -69,59 +69,45 @@ st.markdown("""
     /* Top Header Bar */
     .header-banner {
         background: linear-gradient(90deg, #0F172A 0%, #1E293B 100%);
-        padding: 16px 24px;
-        border-radius: 12px;
+        padding: 14px 22px;
+        border-radius: 10px;
         border: 1px solid #334155;
-        margin-bottom: 18px;
+        margin-bottom: 14px;
         display: flex;
         align-items: center;
         justify-content: space-between;
     }
     .header-title {
-        font-size: 1.45rem;
+        font-size: 1.4rem;
         font-weight: 700;
         color: #F8FAFC;
         margin: 0;
         letter-spacing: -0.01em;
     }
     .header-sub {
-        font-size: 0.82rem;
+        font-size: 0.8rem;
         color: #94A3B8;
-        margin-top: 3px;
+        margin-top: 2px;
         margin-bottom: 0;
     }
     
-    /* Clean Control Card */
-    .control-card {
-        background: #1E293B;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 12px 18px;
-        margin-bottom: 14px;
-    }
-    
-    /* Filter Bar Area (Rule #7: Above Summaries) */
-    .filter-section-title {
-        font-size: 0.88rem;
+    /* Filter Bar Category Headers (Rule #7) */
+    .filter-band-header {
+        font-size: 0.8rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: #38BDF8;
-        margin-bottom: 8px;
+        margin-top: 6px;
+        margin-bottom: 4px;
     }
 
     /* Executive KPI Cards (Rule #6 & #8) */
-    .kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-bottom: 18px;
-    }
     .kpi-item {
         background: #0F172A;
         border: 1px solid #334155;
         border-radius: 10px;
-        padding: 14px 16px;
+        padding: 12px 14px;
         transition: all 0.2s ease;
         position: relative;
     }
@@ -135,38 +121,30 @@ st.markdown("""
         box-shadow: 0 0 0 2px #38BDF8;
     }
     .kpi-header-label {
-        font-size: 0.78rem;
+        font-size: 0.74rem;
         font-weight: 600;
         text-transform: uppercase;
         color: #94A3B8;
         letter-spacing: 0.04em;
-        margin-bottom: 4px;
+        margin-bottom: 3px;
     }
     .kpi-primary-val {
-        font-size: 1.55rem;
+        font-size: 1.45rem;
         font-weight: 700;
         color: #38BDF8;
-        line-height: 1.2;
+        line-height: 1.15;
     }
     .kpi-secondary-info {
-        font-size: 0.76rem;
+        font-size: 0.74rem;
         color: #CBD5E1;
-        margin-top: 4px;
+        margin-top: 3px;
     }
     
-    /* Table & Export Area */
-    .table-container-card {
-        background: #0F172A;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 16px;
-        margin-top: 18px;
-    }
-    
-    /* Streamlit Popover Button Refinements */
+    /* Popover button compact styling */
     button[data-testid="baseButton-secondary"] {
-        border-radius: 8px;
-        font-size: 0.82rem;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        padding: 2px 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -212,43 +190,41 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Master Data Folder & Period Card
-with st.container():
-    p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns([3.5, 1.2, 2.2, 1.5, 1.5])
-    
-    with p_col1:
-        folder_input = st.text_input(
-            "Master Data Folder Path:",
-            value=st.session_state.folder_path,
-            placeholder=r"e.g. D:\Master Data\102026",
-            label_visibility="collapsed"
-        )
-        if folder_input != st.session_state.folder_path:
-            st.session_state.folder_path = folder_input
+# Master Data Folder & Period Bar
+p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns([3.5, 1.2, 2.2, 1.5, 1.5])
 
-    with p_col2:
-        if st.button("📂 Browse", use_container_width=True, help="Select folder using Windows Folder Browser"):
-            open_native_folder_browser()
+with p_col1:
+    folder_input = st.text_input(
+        "Master Data Folder Path:",
+        value=st.session_state.folder_path,
+        placeholder=r"e.g. D:\Master Data\102026",
+        label_visibility="collapsed"
+    )
+    if folder_input != st.session_state.folder_path:
+        st.session_state.folder_path = folder_input
 
-    # Automatic Extraction of Month and Year from Folder Name (Section 2.2 & 2.3)
-    period_info = parse_folder_period(st.session_state.folder_path)
-    
-    with p_col3:
-        # Period Display with inline adjustment popover
-        st.markdown(f"""
-        <div style="background: #0F172A; border: 1px solid #334155; border-radius: 8px; padding: 6px 12px; height: 38px; display: flex; align-items: center; justify-content: space-between;">
-            <span style="font-size: 0.84rem; color: #94A3B8;">Master Period:</span>
-            <span style="font-size: 0.92rem; font-weight: 700; color: #38BDF8;">{period_info['display']}</span>
-        </div>
-        """, unsafe_allow_html=True)
+with p_col2:
+    if st.button("📂 Browse", use_container_width=True, help="Select folder using Windows Folder Browser"):
+        open_native_folder_browser()
 
-    with p_col4:
-        btn_load = st.button("🚀 Load Data", type="primary", use_container_width=True)
+# Automatic Period Extraction (Section 2.2 & 2.3)
+period_info = parse_folder_period(st.session_state.folder_path)
 
-    with p_col5:
-        btn_refresh = st.button("🔄 Refresh Cache", use_container_width=True, help="Re-scan archives and rebuild cache")
+with p_col3:
+    st.markdown(f"""
+    <div style="background: #0F172A; border: 1px solid #334155; border-radius: 8px; padding: 6px 12px; height: 38px; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 0.82rem; color: #94A3B8;">Master Period:</span>
+        <span style="font-size: 0.90rem; font-weight: 700; color: #38BDF8;">{period_info['display']}</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Inline Manual Period Override Popover
+with p_col4:
+    btn_load = st.button("🚀 Load Data", type="primary", use_container_width=True)
+
+with p_col5:
+    btn_refresh = st.button("🔄 Refresh Cache", use_container_width=True, help="Re-scan archives and rebuild cache")
+
+# Manual Period Override Popover
 with st.expander("🛠️ Master Period Manual Override (Optional)", expanded=False):
     ov_c1, ov_c2, ov_c3 = st.columns([2, 2, 4])
     with ov_c1:
@@ -306,7 +282,7 @@ if df_full is None or df_full.empty:
     st.info("👆 Click **'🚀 Load Data'** above to ingest and analyze authentic monthly master records.")
     st.stop()
 
-# ----------------- 2. EXCEL AUTOFILTER ENGINE (RULE #7: ABOVE SUMMARIES) -----------------
+# ----------------- 2. EXCEL AUTOFILTER ENGINE (RULE #7: ALL 22 FILTERS ABOVE SUMMARIES) -----------------
 def render_excel_autofilter_popover(
     label: str,
     available_options: List[Any],
@@ -324,11 +300,9 @@ def render_excel_autofilter_popover(
     """
     state_store = st.session_state.filter_states
     if filter_key not in state_store:
-        # Default State: All options checked (Rule #7)
         state_store[filter_key] = {str(opt): True for opt in available_options}
         
     choice_dict = state_store[filter_key]
-    # Keep dictionary synchronized with current available options
     for opt in available_options:
         s_opt = str(opt)
         if s_opt not in choice_dict:
@@ -338,7 +312,6 @@ def render_excel_autofilter_popover(
     total_opts = len(available_options)
     n_sel = len(active_checked)
 
-    # Dynamic status badge
     if n_sel == total_opts:
         badge = "(All)"
     elif n_sel == 0:
@@ -352,7 +325,6 @@ def render_excel_autofilter_popover(
         st.markdown(f"**Filter by {label}**")
         
         if total_opts > 0:
-            # Dedicated Top Search Box (Excel AutoFilter Standard)
             search_query = st.text_input(
                 "Search",
                 key=f"{filter_key}_search_txt",
@@ -365,19 +337,16 @@ def render_excel_autofilter_popover(
                 if search_query in str(opt).lower()
             ] if search_query else available_options
 
-            # Add current selection to filter (Incremental Search Merge)
             add_to_filter = False
             if search_query and show_add_to_filter:
                 add_to_filter = st.checkbox(
                     "Add current selection to filter",
                     key=f"{filter_key}_add_merge",
                     value=False,
-                    help="When checked, merges newly selected searched items with previous selections without unchecking others."
+                    help="Merges newly selected searched items with previous selections without unchecking others."
                 )
 
-            # Master Checkboxes
             if search_query:
-                # (Select All Search Results) Checkbox
                 chk_all_search = st.checkbox(
                     f"(Select All Search Results) [{len(matching_options)}]",
                     key=f"{filter_key}_chk_search_all",
@@ -385,20 +354,17 @@ def render_excel_autofilter_popover(
                 )
                 if chk_all_search:
                     if not add_to_filter:
-                        # Replace previous selections with search results only
                         for opt in available_options:
                             choice_dict[str(opt)] = False
                     for opt in matching_options:
                         choice_dict[str(opt)] = True
             else:
-                # (Select All) Checkbox when search is empty
                 is_all_checked = (n_sel == total_opts)
                 chk_select_all = st.checkbox(
                     f"(Select All) [{total_opts}]",
                     key=f"{filter_key}_chk_master_all",
                     value=is_all_checked
                 )
-                # Detect master toggle click
                 prev_master = st.session_state.get(f"{filter_key}_prev_master", is_all_checked)
                 if chk_select_all != prev_master:
                     for opt in available_options:
@@ -407,8 +373,7 @@ def render_excel_autofilter_popover(
 
             st.markdown("<hr style='margin: 4px 0 6px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
 
-            # Scrollable Options List with Individual Adjacent Checkboxes
-            with st.container(height=180):
+            with st.container(height=170):
                 for opt in matching_options:
                     s_opt = str(opt)
                     curr_val = choice_dict.get(s_opt, True)
@@ -417,78 +382,136 @@ def render_excel_autofilter_popover(
         else:
             st.caption("No options available in current scope.")
 
-    # Return active selected values
     return [opt for opt in available_options if choice_dict.get(str(opt), True)]
 
-# Filter Bar Container (Positioned ABOVE Summaries as per Rule #7)
-st.markdown("<div class='filter-section-title'>🔍 Contextual Dropdown Filters with Checkboxes (Excel AutoFilter Semantics)</div>", unsafe_allow_html=True)
+# ----------------- RENDER ALL 22 FILTERS DIRECTLY ABOVE SUMMARIES -----------------
+st.markdown("<div style='display: flex; justify-content: space-between; align-items: center; margin-top: 6px;'><div class='filter-band-header'>🏛️ Administrative Hierarchy (Cascading Filters 1 to 4)</div><div></div></div>", unsafe_allow_html=True)
 
-# Row 1: Administrative Hierarchy (Cascading DISCOM -> ZONE -> CIRCLE -> DIVISION)
-af_c1, af_c2, af_c3, af_c4 = st.columns(4)
+# Band 1: Administrative Hierarchy (4 Cascading Filters)
+b1_c1, b1_c2, b1_c3, b1_c4 = st.columns(4)
 
-with af_c1:
+with b1_c1:
     avail_discoms = sorted([d for d in df_full["DISCOM"].dropna().unique() if str(d).strip()])
-    sel_discoms = render_excel_autofilter_popover("DISCOM", avail_discoms, "af_discom")
+    sel_discoms = render_excel_autofilter_popover("1. DISCOM", avail_discoms, "af_discom")
 
-# Dynamic Cascading
-df_f1 = df_full[df_full["DISCOM"].isin(sel_discoms)] if sel_discoms else df_full
+df_step1 = df_full[df_full["DISCOM"].isin(sel_discoms)] if sel_discoms else df_full
 
-with af_c2:
-    avail_zones = sorted([z for z in df_f1["ZONE_NAME"].dropna().unique() if str(z).strip()])
-    sel_zones = render_excel_autofilter_popover("Zone", avail_zones, "af_zone")
+with b1_c2:
+    avail_zones = sorted([z for z in df_step1["ZONE_NAME"].dropna().unique() if str(z).strip()])
+    sel_zones = render_excel_autofilter_popover("2. Zone", avail_zones, "af_zone")
 
-df_f2 = df_f1[df_f1["ZONE_NAME"].isin(sel_zones)] if sel_zones else df_f1
+df_step2 = df_step1[df_step1["ZONE_NAME"].isin(sel_zones)] if sel_zones else df_step1
 
-with af_c3:
-    avail_circles = sorted([c for c in df_f2["CIRCLE_NAME"].dropna().unique() if str(c).strip()])
-    sel_circles = render_excel_autofilter_popover("Circle", avail_circles, "af_circle")
+with b1_c3:
+    avail_circles = sorted([c for c in df_step2["CIRCLE_NAME"].dropna().unique() if str(c).strip()])
+    sel_circles = render_excel_autofilter_popover("3. Circle", avail_circles, "af_circle")
 
-df_f3 = df_f2[df_f2["CIRCLE_NAME"].isin(sel_circles)] if sel_circles else df_f2
+df_step3 = df_step2[df_step2["CIRCLE_NAME"].isin(sel_circles)] if sel_circles else df_step2
 
-with af_c4:
-    avail_divs = sorted([d for d in df_f3["DIVISION_NAME"].dropna().unique() if str(d).strip()])
-    sel_divs = render_excel_autofilter_popover("Division", avail_divs, "af_division")
+with b1_c4:
+    avail_divs = sorted([d for d in df_step3["DIVISION_NAME"].dropna().unique() if str(d).strip()])
+    sel_divs = render_excel_autofilter_popover("4. Division", avail_divs, "af_division")
 
-df_admin_filtered = df_f3[df_f3["DIVISION_NAME"].isin(sel_divs)] if sel_divs else df_f3
+df_admin = df_step3[df_step3["DIVISION_NAME"].isin(sel_divs)] if sel_divs else df_step3
 
-# Row 2: Operational & Consumer Attributes
-of_c1, of_c2, of_c3, of_c4, of_c5, of_c6, of_c7 = st.columns([1.5, 1.2, 1.2, 1.2, 1.4, 1.4, 1.1])
+# Band 2: Operational, Billing & Technical Dimensions (Filters 5 to 11)
+st.markdown("<div class='filter-band-header'>⚡ Operational, Billing & Technical Status (Filters 5 to 11)</div>", unsafe_allow_html=True)
+b2_c1, b2_c2, b2_c3, b2_c4, b2_c5, b2_c6, b2_c7 = st.columns(7)
 
-with of_c1:
-    avail_tariff = sorted([str(t) for t in df_admin_filtered["TARIFF_CATEGORY"].dropna().unique() if str(t).strip()])
-    sel_tariff = render_excel_autofilter_popover("Tariff Category", avail_tariff, "af_tariff")
+with b2_c1:
+    avail_opr = sorted([str(o) for o in df_admin["OPR_FLG"].dropna().unique() if str(o).strip()])
+    sel_opr = render_excel_autofilter_popover("5. OPR_FLAG", avail_opr, "af_opr")
 
-with of_c2:
+with b2_c2:
+    avail_tariff = sorted([str(t) for t in df_admin["TARIFF_CATEGORY"].dropna().unique() if str(t).strip()])
+    sel_tariff = render_excel_autofilter_popover("6. Tariff Category", avail_tariff, "af_tariff")
+
+with b2_c3:
     avail_billed = ["Billed", "Unbilled"]
-    sel_billed = render_excel_autofilter_popover("Billed Flag", avail_billed, "af_billed")
+    sel_billed = render_excel_autofilter_popover("7. Billed Flag", avail_billed, "af_billed")
 
-with of_c3:
+with b2_c4:
     avail_paid = ["Paid", "Unpaid"]
-    sel_paid = render_excel_autofilter_popover("Paid Flag", avail_paid, "af_paid")
+    sel_paid = render_excel_autofilter_popover("8. Paid Flag", avail_paid, "af_paid")
 
-with of_c4:
+with b2_c5:
     avail_oa = ["YES", "NO"]
-    sel_oa = render_excel_autofilter_popover("OA Config", avail_oa, "af_oa")
+    sel_oa = render_excel_autofilter_popover("9. OA Config", avail_oa, "af_oa")
 
-with of_c5:
+with b2_c6:
     avail_sm = ["YES", "NO"]
-    sel_sm = render_excel_autofilter_popover("Smart Meter Flag", avail_sm, "af_sm")
+    sel_sm = render_excel_autofilter_popover("10. Smart Meter Flag", avail_sm, "af_sm")
 
-with of_c6:
+with b2_c7:
     avail_load_rng = ["1-4 KW", "5-9 KW", "10-24 KW", "25-50 KW", "Above 50 KW", "Unknown/Invalid"]
-    present_load_rng = [r for r in avail_load_rng if r in df_admin_filtered["LOAD_RANGE"].unique()]
-    sel_load_rng = render_excel_autofilter_popover("Load Range", present_load_rng, "af_load_range")
+    present_load_rng = [r for r in avail_load_rng if r in df_admin["LOAD_RANGE"].unique()]
+    sel_load_rng = render_excel_autofilter_popover("11. Load Range", present_load_rng, "af_load_range")
 
-with of_c7:
-    # Dedicated Reset All Filters Button (Rule #7)
-    if st.button("🔄 Reset", use_container_width=True, help="Reset all AutoFilters to default state (All Checked)"):
+# Band 3: Metering, Reading & Connection Profile (Filters 12 to 22)
+st.markdown("<div class='filter-band-header'>📟 Metering, Reading & Connection Attributes (Filters 12 to 22)</div>", unsafe_allow_html=True)
+b3_r1_c1, b3_r1_c2, b3_r1_c3, b3_r1_c4, b3_r1_c5, b3_r1_c6 = st.columns(6)
+
+with b3_r1_c1:
+    avail_st = sorted([str(v) for v in df_admin["SUPPLY_TYPE"].dropna().unique() if str(v).strip()])
+    sel_st = render_excel_autofilter_popover("12. SUPPLY_TYPE", avail_st, "af_supply_type")
+
+with b3_r1_c2:
+    avail_conn = sorted([str(v) for v in df_admin["CONNECTION_TYPE"].dropna().unique() if str(v).strip()])
+    sel_conn = render_excel_autofilter_popover("13. TYPE_of_Connection", avail_conn, "af_conn_type")
+
+with b3_r1_c3:
+    avail_cyc = sorted([str(v) for v in df_admin["BILL_CYC_CD"].dropna().unique() if str(v).strip()])
+    sel_cyc = render_excel_autofilter_popover("14. BILL_CYC_CD", avail_cyc, "af_bill_cyc")
+
+with b3_r1_c4:
+    avail_mtype = sorted([str(v) for v in df_admin["MTR_TYPE_CD"].dropna().unique() if str(v).strip()])
+    sel_mtype = render_excel_autofilter_popover("15. MTR_TYPE_CD", avail_mtype, "af_mtr_type")
+
+with b3_r1_c5:
+    avail_mcfg = sorted([str(v) for v in df_admin["MTR_CONFIG_TY_CD"].dropna().unique() if str(v).strip()])
+    sel_mcfg = render_excel_autofilter_popover("16. MTR_CONFIG_TY_CD", avail_mcfg, "af_mtr_cfg")
+
+with b3_r1_c6:
+    avail_make = sorted([str(v) for v in df_admin["MTR_MAKE"].dropna().unique() if str(v).strip()])
+    sel_make = render_excel_autofilter_popover("17. MTR_MAKE", avail_make, "af_mtr_make")
+
+# Sub-row 3B for remaining filters + Universal Reset Button
+b3_r2_c1, b3_r2_c2, b3_r2_c3, b3_r2_c4, b3_r2_c5, b3_r2_c6 = st.columns(6)
+
+with b3_r2_c1:
+    avail_mr_src = sorted([str(v) for v in df_admin["MR_SOURCE_CD"].dropna().unique() if str(v).strip()])
+    sel_mr_src = render_excel_autofilter_popover("18. MR_SOURCE_CD", avail_mr_src, "af_mr_src")
+
+with b3_r2_c2:
+    avail_remark = sorted([str(v) for v in df_admin["METER_READ_REMARK"].dropna().unique() if str(v).strip()])
+    sel_remark = render_excel_autofilter_popover("19. METER_READ_REMARK", avail_remark, "af_mr_remark")
+
+with b3_r2_c3:
+    avail_bb = sorted([str(v) for v in df_admin["BILL_BASIS"].dropna().unique() if str(v).strip()])
+    sel_bb = render_excel_autofilter_popover("20. BILL_BASIS", avail_bb, "af_bill_basis")
+
+with b3_r2_c4:
+    avail_inf = sorted([str(v) for v in df_admin["INF_BILL"].dropna().unique() if str(v).strip()])
+    sel_inf = render_excel_autofilter_popover("21. INF_BILL", avail_inf, "af_inf_bill")
+
+with b3_r2_c5:
+    # PRESYS_CD / CMPRESYS_CODE
+    ps_col = "CMPRESYS_CODE" if "CMPRESYS_CODE" in df_admin.columns else "PRESYS_CD"
+    avail_presys = sorted([str(v) for v in df_admin[ps_col].dropna().unique() if str(v).strip()])
+    sel_presys = render_excel_autofilter_popover("22. PRESYS_CD", avail_presys, "af_presys")
+
+with b3_r2_c6:
+    st.write("")
+    if st.button("🔄 Reset All 22 Filters", use_container_width=True, help="Reset all 22 AutoFilters to default state (All Checked)"):
         st.session_state.filter_states = {}
         st.session_state.drilldown_filter = "All"
         st.rerun()
 
-# ----------------- APPLY ACTIVE FILTERS TO MASTER DATASET -----------------
-active_df = df_admin_filtered.copy()
+# ----------------- APPLY ACTIVE FILTERS ACROSS ALL 22 DIMENSIONS -----------------
+active_df = df_admin.copy()
 
+if sel_opr:
+    active_df = active_df[active_df["OPR_FLG"].astype(str).isin(sel_opr)]
 if sel_tariff:
     active_df = active_df[active_df["TARIFF_CATEGORY"].astype(str).isin(sel_tariff)]
 if sel_billed:
@@ -501,6 +524,28 @@ if sel_sm:
     active_df = active_df[active_df["SMART_METER_FLAG"].isin(sel_sm)]
 if sel_load_rng:
     active_df = active_df[active_df["LOAD_RANGE"].isin(sel_load_rng)]
+if sel_st:
+    active_df = active_df[active_df["SUPPLY_TYPE"].astype(str).isin(sel_st)]
+if sel_conn:
+    active_df = active_df[active_df["CONNECTION_TYPE"].astype(str).isin(sel_conn)]
+if sel_cyc:
+    active_df = active_df[active_df["BILL_CYC_CD"].astype(str).isin(sel_cyc)]
+if sel_mtype:
+    active_df = active_df[active_df["MTR_TYPE_CD"].astype(str).isin(sel_mtype)]
+if sel_mcfg:
+    active_df = active_df[active_df["MTR_CONFIG_TY_CD"].astype(str).isin(sel_mcfg)]
+if sel_make:
+    active_df = active_df[active_df["MTR_MAKE"].astype(str).isin(sel_make)]
+if sel_mr_src:
+    active_df = active_df[active_df["MR_SOURCE_CD"].astype(str).isin(sel_mr_src)]
+if sel_remark:
+    active_df = active_df[active_df["METER_READ_REMARK"].astype(str).isin(sel_remark)]
+if sel_bb:
+    active_df = active_df[active_df["BILL_BASIS"].astype(str).isin(sel_bb)]
+if sel_inf:
+    active_df = active_df[active_df["INF_BILL"].astype(str).isin(sel_inf)]
+if sel_presys:
+    active_df = active_df[active_df[ps_col].astype(str).isin(sel_presys)]
 
 # Calculate KPI Indicators
 kpi = calculate_kpi_summary(active_df)
@@ -508,7 +553,7 @@ kpi = calculate_kpi_summary(active_df)
 # ----------------- 3. SUMMARY INDICATORS & CLICKABLE DRILLDOWNS (RULE #6 & #8) -----------------
 st.markdown("<hr style='margin: 10px 0 14px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
 
-# 8 KPI Metric Cards (Clean Two-Row Grid)
+# 8 KPI Metric Cards
 kpi_r1_c1, kpi_r1_c2, kpi_r1_c3, kpi_r1_c4 = st.columns(4)
 kpi_r2_c1, kpi_r2_c2, kpi_r2_c3, kpi_r2_c4 = st.columns(4)
 
@@ -619,7 +664,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "📟 Smart Metering & Open Access Analysis"
 ])
 
-# Tab 1: Billing Analysis
 with tab1:
     v1_c1, v1_c2 = st.columns([1, 1.6])
     with v1_c1:
@@ -653,7 +697,6 @@ with tab1:
             fig_disc.update_layout(height=300, margin=dict(l=10, r=10, t=35, b=10))
             st.plotly_chart(fig_disc, use_container_width=True)
 
-# Tab 2: Energy Consumption Analysis
 with tab2:
     v2_c1, v2_c2 = st.columns(2)
     with v2_c1:
@@ -686,7 +729,6 @@ with tab2:
             fig_e2.update_layout(height=320, margin=dict(l=10, r=10, t=35, b=10), showlegend=False)
             st.plotly_chart(fig_e2, use_container_width=True)
 
-# Tab 3: Revenue & Realization Assessment
 with tab3:
     v3_c1, v3_c2 = st.columns(2)
     with v3_c1:
@@ -728,7 +770,6 @@ with tab3:
             fig_out.update_layout(height=320, margin=dict(l=10, r=10, t=35, b=10), showlegend=False)
             st.plotly_chart(fig_out, use_container_width=True)
 
-# Tab 4: Smart Metering & Open Access Analysis
 with tab4:
     v4_c1, v4_c2 = st.columns(2)
     with v4_c1:
@@ -766,7 +807,6 @@ with tab4:
 # ----------------- 5. CONSUMER-LEVEL DOSSIER TABLE & STRICT 1:1 PARITY (RULE #6) -----------------
 st.markdown("<hr style='margin: 14px 0 16px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
 
-# Apply Drilldown Isolation
 table_df = active_df.copy()
 drill_type = st.session_state.drilldown_filter
 
@@ -791,7 +831,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Search Bar and Column Views
 t_col1, t_col2, t_col3 = st.columns([3, 2, 2])
 
 with t_col1:
@@ -817,7 +856,6 @@ with t_col3:
         label_visibility="collapsed"
     )
 
-# Filter by Search Term
 if search_term:
     target_search_fields = [c for c in ["ACCT_ID", "NAME", "DIV_CODE", "DIVISION_NAME", "SERIAL_NBR", "METER_BADGE_NO", "SCNO", "KNO"] if c in table_df.columns]
     mask = pd.Series([False] * len(table_df), index=table_df.index)
@@ -825,7 +863,6 @@ if search_term:
         mask = mask | table_df[c].astype(str).str.upper().str.contains(search_term, na=False)
     table_df = table_df[mask]
 
-# Preset Column Definitions
 if col_preset == "Standard Executive View":
     chosen_cols = [
         "ACCT_ID", "NAME", "DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME",
@@ -853,7 +890,6 @@ else:
 
 final_cols = [c for c in chosen_cols if c in table_df.columns]
 
-# Pagination
 total_table_rows = len(table_df)
 total_pages = max(1, math.ceil(total_table_rows / records_per_page))
 
@@ -864,7 +900,6 @@ with pg_c2:
 idx_start = (selected_page - 1) * records_per_page
 idx_end = min(idx_start + records_per_page, total_table_rows)
 
-# Render Data Table
 st.dataframe(
     table_df.iloc[idx_start:idx_end][final_cols],
     use_container_width=True,
@@ -873,7 +908,6 @@ st.dataframe(
 
 st.caption(f"Displaying rows {format_in(idx_start + 1 if total_table_rows > 0 else 0)} to {format_in(idx_end)} of {format_in(total_table_rows)} qualifying consumer records.")
 
-# Downloads (Strict 1:1 Count Parity)
 d_col1, d_col2 = st.columns(2)
 
 with d_col1:

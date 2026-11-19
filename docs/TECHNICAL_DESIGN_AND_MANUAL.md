@@ -1,9 +1,9 @@
 # Technical Design & User Operating Manual
-## Open Access Consumers & Billing Revenue Analysis Dashboard (Version 2.0.0)
+## Open Access Consumers & Billing Revenue Analysis Dashboard (Version 3.0.0)
 
 ---
 
-### 1. Architecture Overview & Redesigned Layout
+### 1. Architecture Overview & 22 Filter Structure
 
 ```mermaid
 graph TD
@@ -21,7 +21,7 @@ graph TD
 
     subgraph UI["Streamlit Executive Interface (global.md Compliant)"]
         TOP["1. Top Header & Period Resolution Bar"]
-        FILT["2. Excel AutoFilter Bar Above Summaries (Rule #7)<br>• DISCOM &rarr; Zone &rarr; Circle &rarr; Division<br>• Tariff, Billed, Paid, OA, Smart Meter, Load Range"]
+        FILT["2. 22 Contextual AutoFilters Above Summaries (Rule #7)<br>• Band 1: DISCOM, Zone, Circle, Division (Cascading)<br>• Band 2: OPR_FLG, Tariff, Billed, Paid, OA, Smart Meter, Load Range<br>• Band 3: Supply, Conn, Cycle, Mtr Type, Mtr Config, Make, Source, Remark, Basis, Inf Bill, Presys"]
         KPI["3. 8 Interactive Summary Cards (Rule #6 & #8)"]
         CHART["4. Analytical Plotly Visualizations (4 Clean Tabs)"]
         TABLE["5. Consumer Dossier Table & Styled Exporter (1:1 Parity)"]
@@ -41,51 +41,44 @@ graph TD
 
 ---
 
-### 2. Implementation of Universal Agent Rules (`global.md`)
+### 2. The 22 Filter Implementation (Rule #7)
 
-#### 2.1 Rule #7: Contextual Dropdown Filters with Checkboxes Above Summaries
-- **Horizontal Placement:** All administrative and operational filters are positioned directly above the summary indicators in a clean, uncluttered two-row grid, completely removing sidebar clutter.
-- **Top Search Box (Excel AutoFilter Standard):** Positioned permanently at the top of each filter popover for instantaneous searching.
-- **`(Select All Search Results)` & `Add current selection to filter`:** Enables searching and selective or incremental merging without clearing out-of-scope selections.
-- **`(Select All)` Checkbox:** Master toggle when search is empty, with real-time total option counts.
-- **Independent State Isolation:** Toggling selections inside one dropdown never corrupts or invalidates selections in other dimensions.
-- **Status Badges:** Each filter button displays real-time status badges: `(All)`, `(None)`, or `(3/15)`.
+All 22 filters requested in Sections 5.1 and 5.2 are rendered in 3 horizontal bands directly above the summary cards:
 
-#### 2.2 Rule #6: Summary Hyperlinks & Strict 1:1 Count Parity
-- Clicking any of the 8 KPI summary cards toggles an active isolation filter on the consumer dossier table below.
-- Active card is highlighted with a blue border glow.
-- Strict 1:1 count parity is verified programmatically and displayed on the table header badge before any file download.
+1. **Band 1 (4 Administrative Filters):** `DISCOM`, `Zone`, `Circle`, `Division` (Omnidirectional Cascading).
+2. **Band 2 (7 Operational & Technical Filters):** `OPR_FLAG`, `Tariff Category`, `Billed Flag`, `Paid Flag`, `OA Config`, `Smart Meter Flag`, `Load Range`.
+3. **Band 3 (11 Metering & Reading Profile Filters):** `SUPPLY_TYPE`, `TYPE_of_Connection`, `BILL_CYC_CD`, `MTR_TYPE_CD`, `MTR_CONFIG_TY_CD`, `MTR_MAKE`, `MR_SOURCE_CD`, `METER_READ_REMARK`, `BILL_BASIS`, `INF_BILL`, `PRESYS_CD`, alongside the universal **`🔄 Reset All 22 Filters`** action.
 
-#### 2.3 Rule #8: Indian Number Formatting
-- Centralized formatting using `format_in()` and `format_currency_dual()` applies `en-IN` comma grouping (`1,00,000`, `10,00,000`, `1,00,00,000`) across all cards, charts, table columns, and exports.
+Each filter popover implements Microsoft Excel AutoFilter semantics:
+- Top search input box.
+- `(Select All Search Results)` checkbox when search text is active.
+- `Add current selection to filter` checkbox for incremental searching.
+- `(Select All)` master toggle when search is empty.
+- Scrollable list with individual adjacent checkboxes for each unique option.
+- Dynamic status badge `(All)`, `(3/10)`, `(None)`.
 
 ---
 
 ### 3. User Operating Manual
 
-#### 3.1 Launching the Application
-Execute the one-click batch launcher:
+#### 3.1 Launching the Dashboard
+Execute:
 ```powershell
 d:\AG Project\Open Access\run_dashboard.bat
 ```
-Or run directly via command line:
+Or start via command line:
 ```powershell
 python -m streamlit run app.py --server.port 8503
 ```
 Open `http://localhost:8503` in your web browser.
 
-#### 3.2 Selecting Master Data
-1. **Browse Folder:** Click **📂 Browse** to launch the Windows native folder picker, or type any valid master data folder path (e.g., `D:\Master Data\102026`).
-2. **Auto-Extracted Month & Year:** The dashboard automatically extracts the first 2 digits as Master Month and the last 4 digits as Master Year.
-3. **Load Data:** Click **🚀 Load Data** to ingest and process records.
+#### 3.2 Operating All 22 Filters
+1. Click any filter button in Band 1, Band 2, or Band 3.
+2. Type in the search box to find specific entities (e.g. searching for a specific meter make, division, or tariff).
+3. Use `(Select All Search Results)` or check/uncheck individual checkboxes.
+4. Click **🔄 Reset All 22 Filters** to restore every filter to the default `(All)` state.
 
-#### 3.3 Operating the Excel AutoFilter Bar Above Summaries
-1. Click any filter button (e.g., **DISCOM: (All)** or **Division: (All)**) to open the AutoFilter popover.
-2. Type in the search box to find specific entities.
-3. Check individual items or use `(Select All Search Results)` / `(Select All)`.
-4. Click **🔄 Reset** to restore all filters to the default `(All)` state.
-
-#### 3.4 Interactive Drilldown & 1:1 Parity Exports
-1. Click **🔗 View All Consumers**, **🔗 Filter Billed Only**, **🔗 Filter Unbilled Only**, or **🔗 Filter Paying Only** to filter the dossier table.
-2. Search consumer names or accounts in the table search bar.
-3. Click **📥 Download Exact Records as Excel (.xlsx)** or **CSV** to download qualifying records matching the displayed summary count.
+#### 3.3 Drilldown & 1:1 Parity Exports
+1. Click **🔗 View All Consumers**, **🔗 Filter Billed Only**, **🔗 Filter Unbilled Only**, or **🔗 Filter Paying Only** on any summary card to filter the consumer dossier table.
+2. Search across consumer names, account IDs, or division names.
+3. Click **📥 Download Exact Records as Excel (.xlsx)** or **CSV** to save the authentic records matching the displayed summary count.
