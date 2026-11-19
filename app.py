@@ -52,6 +52,7 @@ from duckdb_oa_engine import (
     enrich_master_dataframe,
     load_or_extract_oa_dataset,
     calculate_kpi_summary,
+    calculate_admin_hierarchy_summary,
     generate_excel_export,
     CACHE_DIR
 )
@@ -707,6 +708,27 @@ kpi = calculate_kpi_summary(active_df)
 # ----------------- 3. SUMMARY INDICATORS & CLICKABLE DRILLDOWNS (RULE #6 & #8) -----------------
 st.markdown("<hr style='margin: 10px 0 14px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
 
+# Active Administrative Scope Breadcrumb
+d_txt = f"{len(sel_discoms)} DISCOMs" if len(sel_discoms) > 1 else (sel_discoms[0] if sel_discoms else "All DISCOMs")
+z_txt = f"{len(sel_zones)} Zones" if len(sel_zones) > 1 else (sel_zones[0] if sel_zones else "All Zones")
+c_txt = f"{len(sel_circles)} Circles" if len(sel_circles) > 1 else (sel_circles[0] if sel_circles else "All Circles")
+div_txt = f"{len(sel_divs)} Divisions" if len(sel_divs) > 1 else (sel_divs[0] if sel_divs else "All Divisions")
+
+st.markdown(f"""
+<div style="background: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 6px 14px; margin: 0 0 12px 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+    <div style="font-size: 0.84rem; color: #94A3B8;">
+        🏛️ <b>Active Administrative Scope:</b> 
+        <span style="color: #38BDF8; font-weight: 600;">{d_txt}</span> ❯ 
+        <span style="color: #38BDF8; font-weight: 600;">{z_txt}</span> ❯ 
+        <span style="color: #38BDF8; font-weight: 600;">{c_txt}</span> ❯ 
+        <span style="color: #38BDF8; font-weight: 600;">{div_txt}</span>
+    </div>
+    <div style="font-size: 0.82rem; color: #10B981; font-weight: 600;">
+        ✓ Summarizing {format_in(len(active_df))} Consumers
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 kpi_r1_c1, kpi_r1_c2, kpi_r1_c3, kpi_r1_c4 = st.columns(4)
 kpi_r2_c1, kpi_r2_c2, kpi_r2_c3, kpi_r2_c4 = st.columns(4)
 
@@ -806,6 +828,87 @@ with kpi_r2_c4:
     if st.button("🔗 Open & Link Dues Cohort", key="kpi_btn_outstanding", use_container_width=True):
         st.session_state.drilldown_filter = "Outstanding"
         st.rerun()
+
+# ----------------- 3B. ADMINISTRATIVE HIERARCHY SUMMARY TABLE (RULE #6 & #8) -----------------
+st.markdown("<hr style='margin: 12px 0 14px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
+
+# Determine default administrative hierarchy level based on active filters
+if len(sel_divs) == 1 or len(sel_circles) == 1:
+    default_admin_idx = 3  # Division
+elif len(sel_zones) == 1:
+    default_admin_idx = 2  # Circle
+elif len(sel_discoms) == 1:
+    default_admin_idx = 1  # Zone
+else:
+    default_admin_idx = 0  # DISCOM
+
+admin_level_cols = {
+    "🏛️ DISCOM": "DISCOM",
+    "🏢 Zone": "ZONE_NAME",
+    "🏬 Circle": "CIRCLE_NAME",
+    "⚡ Division": "DIVISION_NAME"
+}
+
+ah_col1, ah_col2 = st.columns([5, 2])
+
+with ah_col1:
+    selected_admin_display = st.radio(
+        "📊 Summarize Active Scope Down to Administrative Level:",
+        options=list(admin_level_cols.keys()),
+        index=default_admin_idx,
+        horizontal=True,
+        help="Aggregates all summary metrics down to the chosen administrative tier (DISCOM, Zone, Circle, or Division)"
+    )
+
+admin_grp_col = admin_level_cols[selected_admin_display]
+admin_summary_df = calculate_admin_hierarchy_summary(active_df, group_col=admin_grp_col)
+
+with ah_col2:
+    if not admin_summary_df.empty:
+        summary_excel_bytes = generate_excel_export(admin_summary_df, title=f"Admin_Summary_{admin_grp_col}")
+        st.download_button(
+            label=f"📥 Export {selected_admin_display} Summary (.xlsx)",
+            data=summary_excel_bytes,
+            file_name=f"Admin_Summary_{admin_grp_col}_{effective_month}_{effective_year}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+if not admin_summary_df.empty:
+    display_admin_df = admin_summary_df.copy()
+    display_admin_df["Total Consumers"] = display_admin_df["Total Consumers"].apply(lambda v: format_in(v))
+    display_admin_df["Billed Consumers"] = display_admin_df["Billed Consumers"].apply(lambda v: format_in(v))
+    display_admin_df["Unbilled Consumers"] = display_admin_df["Unbilled Consumers"].apply(lambda v: format_in(v))
+    display_admin_df["Billing %"] = display_admin_df["Billing %"].apply(lambda v: f"{v:.1f}%")
+    display_admin_df["Sold Units (MU)"] = display_admin_df["Sold Units (MU)"].apply(lambda v: format_in(v, 2))
+    display_admin_df["Assessment (₹ Cr)"] = display_admin_df["Assessment (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
+    display_admin_df["CA Excl. Subsidy (₹ Cr)"] = display_admin_df["CA Excl. Subsidy (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
+    display_admin_df["Paying Consumers"] = display_admin_df["Paying Consumers"].apply(lambda v: format_in(v))
+    display_admin_df["Realization (₹ Cr)"] = display_admin_df["Realization (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
+    display_admin_df["Outstanding Dues (₹ Cr)"] = display_admin_df["Outstanding Dues (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
+
+    # Add Reconciled Total Row at the bottom
+    tot_row = {
+        admin_grp_col: "★ TOTAL / ACTIVE SCOPE",
+        "Total Consumers": format_in(kpi["total_consumers"]),
+        "Billed Consumers": format_in(kpi["billed_consumers"]),
+        "Unbilled Consumers": format_in(kpi["unbilled_consumers"]),
+        "Billing %": f"{kpi['billing_ratio']:.1f}%",
+        "Sold Units (MU)": format_in(kpi["sold_units_mu"], 2),
+        "Assessment (₹ Cr)": f"₹ {kpi['current_assessment']/1e7:.2f} Cr",
+        "CA Excl. Subsidy (₹ Cr)": f"₹ {kpi['ca_ex_subs']/1e7:.2f} Cr",
+        "Paying Consumers": format_in(kpi["payment_count"]),
+        "Realization (₹ Cr)": f"₹ {kpi['payment_amount']/1e7:.2f} Cr",
+        "Outstanding Dues (₹ Cr)": f"₹ {kpi['total_outstanding']/1e7:.2f} Cr"
+    }
+    display_admin_df = pd.concat([display_admin_df, pd.DataFrame([tot_row])], ignore_index=True)
+
+    st.dataframe(
+        display_admin_df,
+        use_container_width=True,
+        hide_index=True
+    )
+    st.caption(f"✓ Displaying summary breakdown across {len(admin_summary_df)} {selected_admin_display} administrative units reconciling 100% with KPI indicators.")
 
 # ----------------- 4. VISUALIZATIONS SECTION (UNCLUTTERED TABS) -----------------
 st.markdown("<hr style='margin: 12px 0 16px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
@@ -1063,12 +1166,35 @@ st.dataframe(
 
 st.caption(f"Displaying rows {format_in(idx_start + 1 if total_table_rows > 0 else 0)} to {format_in(idx_end)} of {format_in(total_table_rows)} qualifying consumer records.")
 
+# ----------------- 6. EXPORT REPORTS ENGINE (ALL 167 COLUMNS BY DEFAULT) -----------------
+st.markdown("<hr style='margin: 12px 0 10px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
+
+exp_sel_c1, exp_sel_c2 = st.columns([3, 4])
+with exp_sel_c1:
+    export_column_mode = st.radio(
+        "Export Column Scope:",
+        options=[
+            f"All Available Columns ({len(table_df.columns)} Columns - Full Master Register)",
+            f"Active View Preset Columns Only ({len(final_cols)} Columns)"
+        ],
+        index=0,
+        horizontal=True,
+        help="Select whether to export all 167 authentic & derived master columns or only the active screen preset."
+    )
+
+if export_column_mode.startswith("All Available Columns"):
+    export_dataset = table_df[list(table_df.columns)]
+    n_exp_cols = len(table_df.columns)
+else:
+    export_dataset = table_df[final_cols]
+    n_exp_cols = len(final_cols)
+
 d_col1, d_col2 = st.columns(2)
 
 with d_col1:
-    excel_bytes = generate_excel_export(table_df[final_cols], title="Open_Access_Consumers")
+    excel_bytes = generate_excel_export(export_dataset, title="Open_Access_Consumers")
     st.download_button(
-        label=f"📥 Download Exact Records as Excel (.xlsx) [{format_in(len(table_df))} Rows]",
+        label=f"📥 Download Exact Records as Excel (.xlsx) [{n_exp_cols} Columns • {format_in(len(table_df))} Rows]",
         data=excel_bytes,
         file_name=f"Open_Access_Consumers_{effective_month}_{effective_year}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1076,9 +1202,9 @@ with d_col1:
     )
 
 with d_col2:
-    csv_data = table_df[final_cols].to_csv(index=False).encode("utf-8")
+    csv_data = export_dataset.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label=f"📥 Download Exact Records as CSV (.csv) [{format_in(len(table_df))} Rows]",
+        label=f"📥 Download Exact Records as CSV (.csv) [{n_exp_cols} Columns • {format_in(len(table_df))} Rows]",
         data=csv_data,
         file_name=f"Open_Access_Consumers_{effective_month}_{effective_year}.csv",
         mime="text/csv",

@@ -23,9 +23,10 @@ graph TD
     subgraph UI["Streamlit Executive Interface (global.md Compliant)"]
         TOP["1. Top Header & Period Resolution Bar"]
         FILT["2. 22 Contextual AutoFilters Above Summaries (Rule #7)<br>• Band 1: DISCOM, Zone, Circle, Division (Cascading)<br>• Band 2: OPR_FLG, Tariff, Billed, Paid, OA, Smart Meter, Load Range<br>• Band 3: Supply, Conn, Cycle, Mtr Type, Mtr Config, Make, Source, Remark, Basis, Inf Bill, Presys"]
-        KPI["3. 8 Interactive Summary Cards (Rule #6 & #8)"]
+        KPI["3. 8 Interactive Summary Cards & Scope Breadcrumb (Rule #6 & #8)"]
+        ADMIN["3B. Administrative Hierarchy Summary Table (DISCOM / Zone / Circle / Division)"]
         CHART["4. Analytical Plotly Visualizations (4 Clean Tabs)"]
-        TABLE["5. Consumer Dossier Table & Styled Exporter (1:1 Parity)"]
+        TABLE["5. Consumer Dossier Table & Full 167-Column Exporter (1:1 Parity)"]
     end
 
     MD --> SCAN
@@ -35,8 +36,9 @@ graph TD
     ENRICH --> CACHE
     CACHE --> FILT
     FILT --> KPI
-    FILT --> CHART
-    FILT --> TABLE
+    KPI --> ADMIN
+    ADMIN --> CHART
+    CHART --> TABLE
     TOP --> FILT
 ```
 

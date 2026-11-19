@@ -413,6 +413,57 @@ def calculate_kpi_summary(df: pd.DataFrame) -> Dict[str, Any]:
         "total_outstanding": round(total_outstanding, 2)
     }
 
+# ----------------- ADMINISTRATIVE HIERARCHY SUMMARY AGGREGATION -----------------
+def calculate_admin_hierarchy_summary(
+    df: pd.DataFrame,
+    group_col: str = "DISCOM"
+) -> pd.DataFrame:
+    """
+    Computes summary metrics aggregated down to the administrative hierarchy level:
+    group_col: 'DISCOM', 'ZONE_NAME', 'CIRCLE_NAME', or 'DIVISION_NAME'
+    Returns an aggregated DataFrame conforming to Rule #6 & #8.
+    """
+    if df.empty or group_col not in df.columns:
+        return pd.DataFrame()
+
+    valid = df[df["ACCT_ID"].notna() & (df["ACCT_ID"].astype(str).str.strip() != "") & (df["ACCT_ID"].astype(str).str.strip().str.upper() != "NAN")]
+    if valid.empty:
+        return pd.DataFrame()
+
+    records = []
+    for name, g in valid.groupby(group_col):
+        clean_name = str(name).strip() if name and not pd.isna(name) and str(name).strip() != "" else "Unmapped"
+        tot_c = int(g.groupby(["DISCOM", "ACCT_ID"]).ngroups)
+        b_c = int(g[g["BILLED_FLAG"] == "Billed"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
+        unb_c = max(0, tot_c - b_c)
+        b_ratio = round(b_c / tot_c * 100.0, 1) if tot_c > 0 else 0.0
+
+        sold_mu = round(float(g["CONSUMPTION_CURR_MNTH"].sum()) / 1e6, 2) if "CONSUMPTION_CURR_MNTH" in g.columns else 0.0
+        ca_cr = round(float(g["CURRENT_ASSESSMENT"].sum()) / 1e7, 2) if "CURRENT_ASSESSMENT" in g.columns else 0.0
+        ca_ex_subs_cr = round(float(g["CA_EX_SUBS"].sum()) / 1e7, 2) if "CA_EX_SUBS" in g.columns else 0.0
+        pay_cnt = int(g[g["PAID_FLAG"] == "Paid"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
+        pay_cr = round(float(g["TOTAL_PAY_AMT"].sum()) / 1e7, 2) if "TOTAL_PAY_AMT" in g.columns else 0.0
+        out_cr = round(float(g["TOTAL_OUTSTANDING"].sum()) / 1e7, 2) if "TOTAL_OUTSTANDING" in g.columns else 0.0
+
+        records.append({
+            group_col: clean_name,
+            "Total Consumers": tot_c,
+            "Billed Consumers": b_c,
+            "Unbilled Consumers": unb_c,
+            "Billing %": b_ratio,
+            "Sold Units (MU)": sold_mu,
+            "Assessment (₹ Cr)": ca_cr,
+            "CA Excl. Subsidy (₹ Cr)": ca_ex_subs_cr,
+            "Paying Consumers": pay_cnt,
+            "Realization (₹ Cr)": pay_cr,
+            "Outstanding Dues (₹ Cr)": out_cr
+        })
+
+    summary_df = pd.DataFrame(records)
+    if not summary_df.empty:
+        summary_df = summary_df.sort_values(by="Total Consumers", ascending=False).reset_index(drop=True)
+    return summary_df
+
 # ----------------- STYLED EXCEL EXPORT GENERATOR -----------------
 def generate_excel_export(df: pd.DataFrame, title: str = "Open_Access_Consumers_Analysis") -> bytes:
     """
