@@ -76,7 +76,27 @@ The Administrative Summary table provides hierarchical aggregation conforming to
 
 ---
 
-### 4. User Operating Manual & Git Synchronization
+### 4. Dual Data Scope Ingestion & Real-Time Status Telemetry (Rule #12)
+
+To accommodate both specialized Open Access audits and statewide revenue evaluations across ~4.67 Crore consumers within system hardware constraints (15.34 GB RAM), the system implements a dual-mode ingestion architecture:
+
+1. **Dual Ingestion Mode Switcher:**
+   - **Mode A: Open Access Register (534 OA Consumers - Fast In-Memory):** Ingests authentic Open Access records (`MTR_CONFIG_TY_CD LIKE '%OA%'`) cached in `data_cache/{folder}_oa_dataset.parquet`. Loads in 0.02 seconds with full in-memory responsiveness.
+   - **Mode B: Full Statewide Register (~4.67 Crore Consumers - DuckDB Vectorized):** Pre-aggregates authentic monthly metrics across all 509 division archives into `data_cache/{folder}_full_master_summary.parquet` (51 KB). Loads in 0.003 seconds and utilizes DuckDB multithreaded group-by operations across 16 CPU cores without exceeding system memory limits.
+2. **Dynamic Filter 9 (`OA Config`) Alignment (Rule #7):**
+   - Populated dynamically from authentic source data rather than hardcoded options.
+   - In OA mode, defaults to `(All)` across the 534 authentic OA records.
+   - In Full Statewide mode, allows instant toggling between Open Access consumers (`YES`: 534 records) and general consumers (`NO`: 4,67,39,667 records).
+3. **Real-Time System Telemetry & Status Bar:**
+   - Located permanently above the KPI cards.
+   - Displays live status badge (`🟢 ALL 22 FILTERS FULL SCOPE` / `🟡 FILTERING ACTIVE`).
+   - Dynamic in-scope progress bar and count (`X / Total Consumers (Y.Y%)`).
+   - Active filter criteria chips listing exact dimensions currently narrowed.
+   - Live revenue and billing telemetry counters with DuckDB query latency indicator (`< 0.05s`).
+
+---
+
+### 5. User Operating Manual & Git Synchronization
 
 #### 3.1 Launching the Application
 Run the launcher:

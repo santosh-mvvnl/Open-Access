@@ -316,6 +316,95 @@ def load_or_extract_oa_dataset(
 
     return full_oa_df
 
+# ----------------- STATEWIDE FULL MASTER SUMMARY EXTRACTION & CACHE ENGINE -----------------
+def load_or_extract_full_master_summary(
+    base_dir: str,
+    master_month: str,
+    master_year: str,
+    progress_callback=None,
+    force_refresh: bool = False
+) -> pd.DataFrame:
+    """
+    Computes or loads the statewide division-level aggregated summary across all archives.
+    Caches as Parquet in data_cache/{folder_name}_full_master_summary.parquet.
+    Provides sub-second loading for the entire ~4.67 Crore statewide register.
+    """
+    folder_name = os.path.basename(os.path.normpath(base_dir)).strip()
+    cache_file = os.path.join(CACHE_DIR, f"{folder_name}_full_master_summary.parquet")
+
+    if os.path.exists(cache_file) and not force_refresh:
+        try:
+            con = duckdb.connect()
+            df = con.execute(f"SELECT * FROM '{cache_file.replace(os.sep, '/')}'").df()
+            if not df.empty:
+                return df
+        except Exception as e:
+            print(f"Summary cache read error: {e}")
+
+    file_catalog = discover_master_files(base_dir)
+    if file_catalog.empty:
+        return pd.DataFrame()
+
+    div_map = load_division_mapping()
+    all_res = []
+    discom_groups = file_catalog.groupby("discom")
+    total_groups = len(discom_groups)
+
+    for idx, (discom, group) in enumerate(discom_groups):
+        if progress_callback:
+            progress_callback(idx / total_groups, f"Aggregating {discom} ({len(group)} division files)...")
+
+        flist = group["filepath"].tolist()
+        if not flist:
+            continue
+
+        con = duckdb.connect(database=":memory:")
+        con.execute("SET preserve_insertion_order = false;")
+        con.execute("SET threads TO 16;")
+        q = """
+            SELECT 
+                DIV_CODE,
+                count(*) as total_consumers,
+                sum(case when LAST_BILL_DATE is not null and (LAST_BILL_DATE like '%10/2026%' or LAST_BILL_DATE like '%2026-10%') then 1 else 0 end) as billed_consumers,
+                sum(try_cast(CONSUMPTION_CURR_MNTH as double)) as sold_units_kwh,
+                sum(try_cast(CURRENT_ASSESSMENT as double)) as current_assessment,
+                sum(try_cast(CA_EX_SUBS as double)) as ca_ex_subs,
+                sum(case when try_cast(TOTAL_PAY_AMT as double) > 0 then 1 else 0 end) as payment_count,
+                sum(try_cast(TOTAL_PAY_AMT as double)) as payment_amount,
+                sum(try_cast(TOTAL_OUTSTANDING as double)) as total_outstanding,
+                sum(case when upper(coalesce(MTR_CONFIG_TY_CD, '')) like '%OA%' then 1 else 0 end) as oa_consumers,
+                sum(case when upper(coalesce(CMPRESYS_CODE, '')) like '%MD%' then 1 else 0 end) as smart_meter_consumers
+            FROM read_csv_auto(?, all_varchar=true)
+            GROUP BY DIV_CODE
+        """
+        try:
+            df_d = con.execute(q, [flist]).df()
+            df_d["DISCOM"] = discom
+            all_res.append(df_d)
+        except Exception as e:
+            print(f"Error aggregating {discom}: {e}")
+        finally:
+            con.close()
+
+    if not all_res:
+        return pd.DataFrame()
+
+    full_summary = pd.concat(all_res, ignore_index=True)
+    full_summary["unbilled_consumers"] = full_summary["total_consumers"] - full_summary["billed_consumers"]
+    full_summary["ZONE_NAME"] = [div_map.get(d, {}).get("ZONE_NAME", "Unmapped") for d in full_summary["DIV_CODE"]]
+    full_summary["CIRCLE_NAME"] = [div_map.get(d, {}).get("CIRCLE_NAME", "Unmapped") for d in full_summary["DIV_CODE"]]
+    full_summary["DIVISION_NAME"] = [div_map.get(d, {}).get("DIVISION_NAME", d) for d in full_summary["DIV_CODE"]]
+
+    try:
+        full_summary.to_parquet(cache_file, index=False)
+    except Exception as e:
+        print(f"Warning: Could not save summary cache: {e}")
+
+    if progress_callback:
+        progress_callback(1.0, f"Statewide summary complete: {full_summary['total_consumers'].sum():,} consumers across {len(full_summary)} divisions.")
+
+    return full_summary
+
 # ----------------- FULL MASTER DATA DISCOM/DIVISION QUERY -----------------
 def query_master_subset(
     file_list: List[str],
@@ -376,6 +465,35 @@ def calculate_kpi_summary(df: pd.DataFrame) -> Dict[str, Any]:
             "total_outstanding": 0.0
         }
 
+    # Support pre-aggregated statewide summary mode
+    if "total_consumers" in df.columns:
+        tot_c = int(df["total_consumers"].sum())
+        b_c = int(df["billed_consumers"].sum()) if "billed_consumers" in df.columns else 0
+        unb_c = max(0, tot_c - b_c)
+        b_ratio = (b_c / tot_c * 100.0) if tot_c > 0 else 0.0
+
+        sold_kwh = float(df["sold_units_kwh"].sum()) if "sold_units_kwh" in df.columns else 0.0
+        sold_mu = sold_kwh / 1e6
+        ca_amt = float(df["current_assessment"].sum()) if "current_assessment" in df.columns else 0.0
+        ca_ex_subs_amt = float(df["ca_ex_subs"].sum()) if "ca_ex_subs" in df.columns else 0.0
+        pay_cnt = int(df["payment_count"].sum()) if "payment_count" in df.columns else 0
+        pay_amt = float(df["payment_amount"].sum()) if "payment_amount" in df.columns else 0.0
+        tot_out = float(df["total_outstanding"].sum()) if "total_outstanding" in df.columns else 0.0
+
+        return {
+            "total_consumers": tot_c,
+            "billed_consumers": b_c,
+            "unbilled_consumers": unb_c,
+            "billing_ratio": round(b_ratio, 2),
+            "sold_units_kwh": round(sold_kwh, 2),
+            "sold_units_mu": round(sold_mu, 4),
+            "current_assessment": round(ca_amt, 2),
+            "ca_ex_subs": round(ca_ex_subs_amt, 2),
+            "payment_count": pay_cnt,
+            "payment_amount": round(pay_amt, 2),
+            "total_outstanding": round(tot_out, 2)
+        }
+
     # Distinct consumers based on DISCOM + ACCT_ID composite key
     valid_acct = df[df["ACCT_ID"].notna() & (df["ACCT_ID"].astype(str).str.strip() != "") & (df["ACCT_ID"].astype(str).str.strip().str.upper() != "NAN")]
     total_consumers = int(valid_acct.groupby(["DISCOM", "ACCT_ID"]).ngroups) if not valid_acct.empty else 0
@@ -422,18 +540,31 @@ HIERARCHY_LEVEL_CHAINS = {
 }
 
 def _compute_admin_metrics(g: pd.DataFrame) -> Dict[str, Any]:
-    """Helper computing metrics across a group of authentic master records."""
-    tot_c = int(g.groupby(["DISCOM", "ACCT_ID"]).ngroups)
-    b_c = int(g[g["BILLED_FLAG"] == "Billed"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
-    unb_c = max(0, tot_c - b_c)
-    b_ratio = round(b_c / tot_c * 100.0, 1) if tot_c > 0 else 0.0
+    """Helper computing metrics across a group of authentic master records or pre-aggregated summary."""
+    if "total_consumers" in g.columns:
+        tot_c = int(g["total_consumers"].sum())
+        b_c = int(g["billed_consumers"].sum()) if "billed_consumers" in g.columns else 0
+        unb_c = max(0, tot_c - b_c)
+        b_ratio = round(b_c / tot_c * 100.0, 1) if tot_c > 0 else 0.0
 
-    sold_mu = round(float(g["CONSUMPTION_CURR_MNTH"].sum()) / 1e6, 2) if "CONSUMPTION_CURR_MNTH" in g.columns else 0.0
-    ca_cr = round(float(g["CURRENT_ASSESSMENT"].sum()) / 1e7, 2) if "CURRENT_ASSESSMENT" in g.columns else 0.0
-    ca_ex_subs_cr = round(float(g["CA_EX_SUBS"].sum()) / 1e7, 2) if "CA_EX_SUBS" in g.columns else 0.0
-    pay_cnt = int(g[g["PAID_FLAG"] == "Paid"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
-    pay_cr = round(float(g["TOTAL_PAY_AMT"].sum()) / 1e7, 2) if "TOTAL_PAY_AMT" in g.columns else 0.0
-    out_cr = round(float(g["TOTAL_OUTSTANDING"].sum()) / 1e7, 2) if "TOTAL_OUTSTANDING" in g.columns else 0.0
+        sold_mu = round(float(g["sold_units_kwh"].sum()) / 1e6, 2) if "sold_units_kwh" in g.columns else 0.0
+        ca_cr = round(float(g["current_assessment"].sum()) / 1e7, 2) if "current_assessment" in g.columns else 0.0
+        ca_ex_subs_cr = round(float(g["ca_ex_subs"].sum()) / 1e7, 2) if "ca_ex_subs" in g.columns else 0.0
+        pay_cnt = int(g["payment_count"].sum()) if "payment_count" in g.columns else 0
+        pay_cr = round(float(g["payment_amount"].sum()) / 1e7, 2) if "payment_amount" in g.columns else 0.0
+        out_cr = round(float(g["total_outstanding"].sum()) / 1e7, 2) if "total_outstanding" in g.columns else 0.0
+    else:
+        tot_c = int(g.groupby(["DISCOM", "ACCT_ID"]).ngroups) if ("DISCOM" in g.columns and "ACCT_ID" in g.columns) else len(g)
+        b_c = int(g[g["BILLED_FLAG"] == "Billed"].groupby(["DISCOM", "ACCT_ID"]).ngroups) if ("BILLED_FLAG" in g.columns and "DISCOM" in g.columns and "ACCT_ID" in g.columns) else 0
+        unb_c = max(0, tot_c - b_c)
+        b_ratio = round(b_c / tot_c * 100.0, 1) if tot_c > 0 else 0.0
+
+        sold_mu = round(float(g["CONSUMPTION_CURR_MNTH"].sum()) / 1e6, 2) if "CONSUMPTION_CURR_MNTH" in g.columns else 0.0
+        ca_cr = round(float(g["CURRENT_ASSESSMENT"].sum()) / 1e7, 2) if "CURRENT_ASSESSMENT" in g.columns else 0.0
+        ca_ex_subs_cr = round(float(g["CA_EX_SUBS"].sum()) / 1e7, 2) if "CA_EX_SUBS" in g.columns else 0.0
+        pay_cnt = int(g[g["PAID_FLAG"] == "Paid"].groupby(["DISCOM", "ACCT_ID"]).ngroups) if ("PAID_FLAG" in g.columns and "DISCOM" in g.columns and "ACCT_ID" in g.columns) else 0
+        pay_cr = round(float(g["TOTAL_PAY_AMT"].sum()) / 1e7, 2) if "TOTAL_PAY_AMT" in g.columns else 0.0
+        out_cr = round(float(g["TOTAL_OUTSTANDING"].sum()) / 1e7, 2) if "TOTAL_OUTSTANDING" in g.columns else 0.0
 
     return {
         "Total Consumers": tot_c,
@@ -463,7 +594,10 @@ def calculate_admin_hierarchy_summary(
     if df.empty or group_col not in df.columns:
         return pd.DataFrame()
 
-    valid = df[df["ACCT_ID"].notna() & (df["ACCT_ID"].astype(str).str.strip() != "") & (df["ACCT_ID"].astype(str).str.strip().str.upper() != "NAN")]
+    if "total_consumers" in df.columns:
+        valid = df.copy()
+    else:
+        valid = df[df["ACCT_ID"].notna() & (df["ACCT_ID"].astype(str).str.strip() != "") & (df["ACCT_ID"].astype(str).str.strip().str.upper() != "NAN")]
     if valid.empty:
         return pd.DataFrame()
 
