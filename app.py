@@ -859,9 +859,14 @@ with ah_col1:
         horizontal=True,
         help="Aggregates all summary metrics down to the chosen administrative tier (DISCOM, Zone, Circle, or Division)"
     )
+    include_subtotals = st.checkbox(
+        "☑️ Include Hierarchical Subtotals at Circle, Zone & DISCOM Levels",
+        value=True,
+        help="Inserts subtotal rows for Circle, Zone, and DISCOM levels with a final Grand Total row"
+    )
 
 admin_grp_col = admin_level_cols[selected_admin_display]
-admin_summary_df = calculate_admin_hierarchy_summary(active_df, group_col=admin_grp_col)
+admin_summary_df = calculate_admin_hierarchy_summary(active_df, group_col=admin_grp_col, include_subtotals=include_subtotals)
 
 with ah_col2:
     if not admin_summary_df.empty:
@@ -887,35 +892,37 @@ if not admin_summary_df.empty:
     display_admin_df["Realization (₹ Cr)"] = display_admin_df["Realization (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
     display_admin_df["Outstanding Dues (₹ Cr)"] = display_admin_df["Outstanding Dues (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
 
-    # Add Reconciled Total Row at the bottom with all active hierarchy columns
-    active_hierarchy_cols = [c for c in ["DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME"] if c in admin_summary_df.columns]
-    tot_row = {}
-    for idx, c in enumerate(active_hierarchy_cols):
-        if idx == 0:
-            tot_row[c] = "★ TOTAL / ACTIVE SCOPE"
-        else:
-            tot_row[c] = "-"
+    # If subtotals are not included, add Reconciled Total Row at the bottom with all active hierarchy columns
+    if not include_subtotals:
+        active_hierarchy_cols = [c for c in ["DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME"] if c in admin_summary_df.columns]
+        tot_row = {}
+        for idx, c in enumerate(active_hierarchy_cols):
+            if idx == 0:
+                tot_row[c] = "★ TOTAL / ACTIVE SCOPE"
+            else:
+                tot_row[c] = "-"
 
-    tot_row.update({
-        "Total Consumers": format_in(kpi["total_consumers"]),
-        "Billed Consumers": format_in(kpi["billed_consumers"]),
-        "Unbilled Consumers": format_in(kpi["unbilled_consumers"]),
-        "Billing %": f"{kpi['billing_ratio']:.1f}%",
-        "Sold Units (MU)": format_in(kpi["sold_units_mu"], 2),
-        "Assessment (₹ Cr)": f"₹ {kpi['current_assessment']/1e7:.2f} Cr",
-        "CA Excl. Subsidy (₹ Cr)": f"₹ {kpi['ca_ex_subs']/1e7:.2f} Cr",
-        "Paying Consumers": format_in(kpi["payment_count"]),
-        "Realization (₹ Cr)": f"₹ {kpi['payment_amount']/1e7:.2f} Cr",
-        "Outstanding Dues (₹ Cr)": f"₹ {kpi['total_outstanding']/1e7:.2f} Cr"
-    })
-    display_admin_df = pd.concat([display_admin_df, pd.DataFrame([tot_row])], ignore_index=True)
+        tot_row.update({
+            "Total Consumers": format_in(kpi["total_consumers"]),
+            "Billed Consumers": format_in(kpi["billed_consumers"]),
+            "Unbilled Consumers": format_in(kpi["unbilled_consumers"]),
+            "Billing %": f"{kpi['billing_ratio']:.1f}%",
+            "Sold Units (MU)": format_in(kpi["sold_units_mu"], 2),
+            "Assessment (₹ Cr)": f"₹ {kpi['current_assessment']/1e7:.2f} Cr",
+            "CA Excl. Subsidy (₹ Cr)": f"₹ {kpi['ca_ex_subs']/1e7:.2f} Cr",
+            "Paying Consumers": format_in(kpi["payment_count"]),
+            "Realization (₹ Cr)": f"₹ {kpi['payment_amount']/1e7:.2f} Cr",
+            "Outstanding Dues (₹ Cr)": f"₹ {kpi['total_outstanding']/1e7:.2f} Cr"
+        })
+        display_admin_df = pd.concat([display_admin_df, pd.DataFrame([tot_row])], ignore_index=True)
 
     st.dataframe(
         display_admin_df,
         use_container_width=True,
         hide_index=True
     )
-    st.caption(f"✓ Displaying summary breakdown across {len(admin_summary_df)} {selected_admin_display} administrative units with complete upper-level hierarchy reconciling 100% with KPI indicators.")
+    subtotal_note = " with hierarchical subtotals and Grand Total" if include_subtotals else " with Grand Total"
+    st.caption(f"✓ Displaying summary breakdown across {len(admin_summary_df)} rows for {selected_admin_display} level{subtotal_note}, reconciling 100% with KPI indicators.")
 
 # ----------------- 4. VISUALIZATIONS SECTION (UNCLUTTERED TABS) -----------------
 st.markdown("<hr style='margin: 12px 0 16px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)

@@ -62,7 +62,21 @@ The filter engine implements Microsoft Excel AutoFilter semantics down to the ex
 
 ---
 
-### 3. User Operating Manual & Git Synchronization
+### 3. Administrative Hierarchy Summary with Multi-Level Subtotals
+
+The Administrative Summary table provides hierarchical aggregation conforming to Universal Agent Rules #4, #6, and #8:
+1. **Upper-Level Hierarchy Display:** When summarizing down to any administrative tier (Division, Circle, Zone, or DISCOM), all parent hierarchy columns are retained in the summary view (e.g., Division level displays `DISCOM`, `ZONE_NAME`, `CIRCLE_NAME`, `DIVISION_NAME`).
+2. **Multi-Level Subtotals:**
+   - **Division Tier:** Displays Division rows, Circle Subtotals (`★ Subtotal (Circle)`), Zone Subtotals (`★★ Subtotal (Zone)`), DISCOM Subtotals (`★★★ Subtotal (DISCOM)`), and Grand Total (`★★★★ GRAND TOTAL`).
+   - **Circle Tier:** Displays Circle rows, Zone Subtotals (`★ Subtotal (Zone)`), DISCOM Subtotals (`★★ Subtotal (DISCOM)`), and Grand Total (`★★★ GRAND TOTAL`).
+   - **Zone Tier:** Displays Zone rows, DISCOM Subtotals (`★ Subtotal (DISCOM)`), and Grand Total (`★★ GRAND TOTAL`).
+   - **DISCOM Tier:** Displays DISCOM rows and Grand Total (`★ GRAND TOTAL`).
+3. **Reconciled Grand Total:** The bottom Grand Total row reconciles 100% with all 8 KPI cards and the authentic filtered master dataset.
+4. **Styled Excel Export:** Exports preserve subtotal rows highlighted in light gray (`#F1F5F9`) and Grand Total rows in darker slate gray (`#CBD5E1`) with bold text and Indian comma formatting.
+
+---
+
+### 4. User Operating Manual & Git Synchronization
 
 #### 3.1 Launching the Application
 Run the launcher:

@@ -421,15 +421,44 @@ HIERARCHY_LEVEL_CHAINS = {
     "DIVISION_NAME": ["DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME"]
 }
 
+def _compute_admin_metrics(g: pd.DataFrame) -> Dict[str, Any]:
+    """Helper computing metrics across a group of authentic master records."""
+    tot_c = int(g.groupby(["DISCOM", "ACCT_ID"]).ngroups)
+    b_c = int(g[g["BILLED_FLAG"] == "Billed"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
+    unb_c = max(0, tot_c - b_c)
+    b_ratio = round(b_c / tot_c * 100.0, 1) if tot_c > 0 else 0.0
+
+    sold_mu = round(float(g["CONSUMPTION_CURR_MNTH"].sum()) / 1e6, 2) if "CONSUMPTION_CURR_MNTH" in g.columns else 0.0
+    ca_cr = round(float(g["CURRENT_ASSESSMENT"].sum()) / 1e7, 2) if "CURRENT_ASSESSMENT" in g.columns else 0.0
+    ca_ex_subs_cr = round(float(g["CA_EX_SUBS"].sum()) / 1e7, 2) if "CA_EX_SUBS" in g.columns else 0.0
+    pay_cnt = int(g[g["PAID_FLAG"] == "Paid"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
+    pay_cr = round(float(g["TOTAL_PAY_AMT"].sum()) / 1e7, 2) if "TOTAL_PAY_AMT" in g.columns else 0.0
+    out_cr = round(float(g["TOTAL_OUTSTANDING"].sum()) / 1e7, 2) if "TOTAL_OUTSTANDING" in g.columns else 0.0
+
+    return {
+        "Total Consumers": tot_c,
+        "Billed Consumers": b_c,
+        "Unbilled Consumers": unb_c,
+        "Billing %": b_ratio,
+        "Sold Units (MU)": sold_mu,
+        "Assessment (₹ Cr)": ca_cr,
+        "CA Excl. Subsidy (₹ Cr)": ca_ex_subs_cr,
+        "Paying Consumers": pay_cnt,
+        "Realization (₹ Cr)": pay_cr,
+        "Outstanding Dues (₹ Cr)": out_cr
+    }
+
 def calculate_admin_hierarchy_summary(
     df: pd.DataFrame,
-    group_col: str = "DISCOM"
+    group_col: str = "DISCOM",
+    include_subtotals: bool = True
 ) -> pd.DataFrame:
     """
     Computes summary metrics aggregated down to the administrative hierarchy level:
     group_col: 'DISCOM', 'ZONE_NAME', 'CIRCLE_NAME', or 'DIVISION_NAME'
-    Includes all upper-level hierarchy tiers in the aggregation and display table.
-    Returns an aggregated DataFrame conforming to Rule #6 & #8.
+    Includes all upper-level hierarchy tiers in the aggregation.
+    When include_subtotals=True, inserts subtotal rows at Circle, Zone, and DISCOM levels
+    plus Grand Total.
     """
     if df.empty or group_col not in df.columns:
         return pd.DataFrame()
@@ -438,54 +467,148 @@ def calculate_admin_hierarchy_summary(
     if valid.empty:
         return pd.DataFrame()
 
-    # Determine full hierarchy lineage chain leading to target level
-    chain = HIERARCHY_LEVEL_CHAINS.get(group_col, [group_col])
-    active_chain = [col for col in chain if col in valid.columns]
-    if not active_chain:
-        active_chain = [group_col]
-
     records = []
-    for keys, g in valid.groupby(active_chain):
-        if not isinstance(keys, tuple):
-            keys = (keys,)
 
-        row_dict = {}
-        for col_name, k_val in zip(active_chain, keys):
-            clean_k = str(k_val).strip() if k_val and not pd.isna(k_val) and str(k_val).strip() != "" else "Unmapped"
-            row_dict[col_name] = clean_k
+    if not include_subtotals:
+        chain = HIERARCHY_LEVEL_CHAINS.get(group_col, [group_col])
+        active_chain = [col for col in chain if col in valid.columns]
+        for keys, g in valid.groupby(active_chain):
+            if not isinstance(keys, tuple):
+                keys = (keys,)
+            row_dict = {col: str(k).strip() if k and not pd.isna(k) else "Unmapped" for col, k in zip(active_chain, keys)}
+            row_dict.update(_compute_admin_metrics(g))
+            records.append(row_dict)
+        summary_df = pd.DataFrame(records)
+        if not summary_df.empty:
+            summary_df = summary_df.sort_values(by=active_chain).reset_index(drop=True)
+        return summary_df
 
-        tot_c = int(g.groupby(["DISCOM", "ACCT_ID"]).ngroups)
-        b_c = int(g[g["BILLED_FLAG"] == "Billed"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
-        unb_c = max(0, tot_c - b_c)
-        b_ratio = round(b_c / tot_c * 100.0, 1) if tot_c > 0 else 0.0
+    # Hierarchical Subtotal Insertion
+    if group_col == "DIVISION_NAME":
+        for d_name, dg in valid.groupby("DISCOM"):
+            for z_name, zg in dg.groupby("ZONE_NAME"):
+                for c_name, cg in zg.groupby("CIRCLE_NAME"):
+                    for div_name, divg in cg.groupby("DIVISION_NAME"):
+                        r = {
+                            "DISCOM": str(d_name).strip(),
+                            "ZONE_NAME": str(z_name).strip(),
+                            "CIRCLE_NAME": str(c_name).strip(),
+                            "DIVISION_NAME": str(div_name).strip()
+                        }
+                        r.update(_compute_admin_metrics(divg))
+                        records.append(r)
+                    # Circle Subtotal
+                    c_sub = {
+                        "DISCOM": str(d_name).strip(),
+                        "ZONE_NAME": str(z_name).strip(),
+                        "CIRCLE_NAME": f"★ Subtotal ({str(c_name).strip()})",
+                        "DIVISION_NAME": "—"
+                    }
+                    c_sub.update(_compute_admin_metrics(cg))
+                    records.append(c_sub)
+                # Zone Subtotal
+                z_sub = {
+                    "DISCOM": str(d_name).strip(),
+                    "ZONE_NAME": f"★★ Subtotal ({str(z_name).strip()})",
+                    "CIRCLE_NAME": "—",
+                    "DIVISION_NAME": "—"
+                }
+                z_sub.update(_compute_admin_metrics(zg))
+                records.append(z_sub)
+            # DISCOM Subtotal
+            d_sub = {
+                "DISCOM": f"★★★ Subtotal ({str(d_name).strip()})",
+                "ZONE_NAME": "—",
+                "CIRCLE_NAME": "—",
+                "DIVISION_NAME": "—"
+            }
+            d_sub.update(_compute_admin_metrics(dg))
+            records.append(d_sub)
+        # Grand Total
+        gt = {
+            "DISCOM": "★★★★ GRAND TOTAL",
+            "ZONE_NAME": "—",
+            "CIRCLE_NAME": "—",
+            "DIVISION_NAME": "—"
+        }
+        gt.update(_compute_admin_metrics(valid))
+        records.append(gt)
 
-        sold_mu = round(float(g["CONSUMPTION_CURR_MNTH"].sum()) / 1e6, 2) if "CONSUMPTION_CURR_MNTH" in g.columns else 0.0
-        ca_cr = round(float(g["CURRENT_ASSESSMENT"].sum()) / 1e7, 2) if "CURRENT_ASSESSMENT" in g.columns else 0.0
-        ca_ex_subs_cr = round(float(g["CA_EX_SUBS"].sum()) / 1e7, 2) if "CA_EX_SUBS" in g.columns else 0.0
-        pay_cnt = int(g[g["PAID_FLAG"] == "Paid"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
-        pay_cr = round(float(g["TOTAL_PAY_AMT"].sum()) / 1e7, 2) if "TOTAL_PAY_AMT" in g.columns else 0.0
-        out_cr = round(float(g["TOTAL_OUTSTANDING"].sum()) / 1e7, 2) if "TOTAL_OUTSTANDING" in g.columns else 0.0
+    elif group_col == "CIRCLE_NAME":
+        for d_name, dg in valid.groupby("DISCOM"):
+            for z_name, zg in dg.groupby("ZONE_NAME"):
+                for c_name, cg in zg.groupby("CIRCLE_NAME"):
+                    r = {
+                        "DISCOM": str(d_name).strip(),
+                        "ZONE_NAME": str(z_name).strip(),
+                        "CIRCLE_NAME": str(c_name).strip()
+                    }
+                    r.update(_compute_admin_metrics(cg))
+                    records.append(r)
+                # Zone Subtotal
+                z_sub = {
+                    "DISCOM": str(d_name).strip(),
+                    "ZONE_NAME": f"★ Subtotal ({str(z_name).strip()})",
+                    "CIRCLE_NAME": "—"
+                }
+                z_sub.update(_compute_admin_metrics(zg))
+                records.append(z_sub)
+            # DISCOM Subtotal
+            d_sub = {
+                "DISCOM": f"★★ Subtotal ({str(d_name).strip()})",
+                "ZONE_NAME": "—",
+                "CIRCLE_NAME": "—"
+            }
+            d_sub.update(_compute_admin_metrics(dg))
+            records.append(d_sub)
+        # Grand Total
+        gt = {
+            "DISCOM": "★★★ GRAND TOTAL",
+            "ZONE_NAME": "—",
+            "CIRCLE_NAME": "—"
+        }
+        gt.update(_compute_admin_metrics(valid))
+        records.append(gt)
 
-        row_dict.update({
-            "Total Consumers": tot_c,
-            "Billed Consumers": b_c,
-            "Unbilled Consumers": unb_c,
-            "Billing %": b_ratio,
-            "Sold Units (MU)": sold_mu,
-            "Assessment (₹ Cr)": ca_cr,
-            "CA Excl. Subsidy (₹ Cr)": ca_ex_subs_cr,
-            "Paying Consumers": pay_cnt,
-            "Realization (₹ Cr)": pay_cr,
-            "Outstanding Dues (₹ Cr)": out_cr
-        })
-        records.append(row_dict)
+    elif group_col == "ZONE_NAME":
+        for d_name, dg in valid.groupby("DISCOM"):
+            for z_name, zg in dg.groupby("ZONE_NAME"):
+                r = {
+                    "DISCOM": str(d_name).strip(),
+                    "ZONE_NAME": str(z_name).strip()
+                }
+                r.update(_compute_admin_metrics(zg))
+                records.append(r)
+            # DISCOM Subtotal
+            d_sub = {
+                "DISCOM": f"★ Subtotal ({str(d_name).strip()})",
+                "ZONE_NAME": "—"
+            }
+            d_sub.update(_compute_admin_metrics(dg))
+            records.append(d_sub)
+        # Grand Total
+        gt = {
+            "DISCOM": "★★ GRAND TOTAL",
+            "ZONE_NAME": "—"
+        }
+        gt.update(_compute_admin_metrics(valid))
+        records.append(gt)
 
-    summary_df = pd.DataFrame(records)
-    if not summary_df.empty:
-        # Sort hierarchically across parent and target administrative tiers
-        sort_cols = [c for c in active_chain if c in summary_df.columns]
-        summary_df = summary_df.sort_values(by=sort_cols).reset_index(drop=True)
-    return summary_df
+    else:  # DISCOM
+        for d_name, dg in valid.groupby("DISCOM"):
+            r = {
+                "DISCOM": str(d_name).strip()
+            }
+            r.update(_compute_admin_metrics(dg))
+            records.append(r)
+        # Grand Total
+        gt = {
+            "DISCOM": "★ GRAND TOTAL"
+        }
+        gt.update(_compute_admin_metrics(valid))
+        records.append(gt)
+
+    return pd.DataFrame(records)
 
 # ----------------- STYLED EXCEL EXPORT GENERATOR -----------------
 def generate_excel_export(df: pd.DataFrame, title: str = "Open_Access_Consumers_Analysis") -> bytes:
@@ -528,10 +651,21 @@ def generate_excel_export(df: pd.DataFrame, title: str = "Open_Access_Consumers_
     # Format Data Rows
     for row_idx, row_data in enumerate(df.itertuples(index=False), start=2):
         ws.append(list(row_data))
+        is_subtotal_row = any("Subtotal" in str(v) for v in row_data)
+        is_grand_total = any("GRAND TOTAL" in str(v) or "TOTAL / ACTIVE SCOPE" in str(v) for v in row_data)
+
         for col_idx, val in enumerate(row_data, start=1):
             cell = ws.cell(row=row_idx, column=col_idx)
-            cell.font = data_font
             cell.border = thin_border
+            
+            if is_grand_total:
+                cell.fill = PatternFill(start_color="CBD5E1", end_color="CBD5E1", fill_type="solid")
+                cell.font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+            elif is_subtotal_row:
+                cell.fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+                cell.font = Font(name="Calibri", size=10, bold=True, color="1E293B")
+            else:
+                cell.font = data_font
             
             # Numeric alignment & formatting
             if isinstance(val, (int, np.integer)):
