@@ -54,6 +54,24 @@ DISCOMS = ['DVVNL', 'KESCO', 'MVVNL', 'PuVVNL', 'PVVNL']
 # Administrative Hierarchy Columns
 ADMIN_COLUMNS = ['DISCOM', 'ZONE_NAME', 'CIRCLE_NAME', 'DIV_CODE', 'DIVISION_NAME', 'DISTRICT']
 
+# Derived and Composite Key Columns
+DERIVED_COLUMNS = [
+    'DISCOM_ACCT_ID', 'BILLED_FLAG', 'PAID_FLAG', 'TARIFF_CATEGORY',
+    'OA_CONFIG', 'SMART_METER_FLAG', 'LOAD_KW', 'LOAD_RANGE'
+]
+
+def derive_composite_consumer_key(discom: Any, acct_id: Any) -> str:
+    """
+    Derives the universal composite uniqueness key: DISCOM + ACCT_ID.
+    In UPPCL, account IDs are generated independently per DISCOM.
+    Only the combination of DISCOM + ACCT_ID is globally unique statewide.
+    """
+    d_clean = str(discom).strip().upper() if discom is not None and not pd.isna(discom) else ""
+    a_clean = str(acct_id).strip() if acct_id is not None and not pd.isna(acct_id) else ""
+    if not a_clean or a_clean in ("-", "NAN", "NULL", "NONE"):
+        return ""
+    return f"{d_clean}_{a_clean}" if d_clean else a_clean
+
 # Month dictionary
 MONTH_NAMES = {
     '01': 'January', '02': 'February', '03': 'March', '04': 'April',

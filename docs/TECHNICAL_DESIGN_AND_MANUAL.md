@@ -16,7 +16,7 @@ graph TD
     subgraph Engine["DuckDB High-Performance Vectorized Processing"]
         SCAN["File Discovery & Catalog<br>(Filter > 500B non-empty files)"]
         DUCK["Vectorized In-Memory DuckDB Engine<br>(Parallel Chunk Scanner)"]
-        ENRICH["Derived Column Transformation<br>• Billed Flag<br>• Paid Flag<br>• Tariff Category<br>• OA & Smart Flags<br>• Load Conversion (CEIL KW)"]
+        ENRICH["Derived Column Transformation<br>• Composite Key: DISCOM_ACCT_ID<br>• Billed Flag<br>• Paid Flag<br>• Tariff Category<br>• OA & Smart Flags<br>• Load Conversion (CEIL KW)"]
         CACHE["Parquet Cache Store<br>(data_cache/{folder}_oa_dataset.parquet)"]
     end
 

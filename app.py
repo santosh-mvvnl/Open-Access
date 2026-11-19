@@ -716,7 +716,7 @@ with kpi_r1_c1:
     is_active = (curr_drill == "All")
     st.markdown(f"""
     <div class="kpi-item {'active-drill' if is_active else ''}">
-        <div class="kpi-header-label">1. Total Consumers (Distinct ACCT_ID)</div>
+        <div class="kpi-header-label">1. Total Consumers (Distinct DISCOM + ACCT_ID)</div>
         <div class="kpi-primary-val">{format_in(kpi['total_consumers'])}</div>
         <div class="kpi-secondary-info">All qualifying consumers in active scope</div>
     </div>
@@ -836,14 +836,16 @@ with tab1:
 
     with v1_c2:
         if not active_df.empty:
-            grp_disc = active_df.groupby(["DISCOM", "BILLED_FLAG"])["ACCT_ID"].nunique().reset_index()
+            grp_disc = active_df.groupby(["DISCOM", "BILLED_FLAG"]).apply(
+                lambda g: int(g.groupby(["DISCOM", "ACCT_ID"]).ngroups)
+            ).reset_index(name="Consumers")
             fig_disc = px.bar(
                 grp_disc,
                 x="DISCOM",
-                y="ACCT_ID",
+                y="Consumers",
                 color="BILLED_FLAG",
                 barmode="group",
-                title="<b>Billed Consumers by DISCOM</b>",
+                title="<b>Billed Consumers by DISCOM (Distinct DISCOM + ACCT_ID)</b>",
                 color_discrete_map={"Billed": "#10B981", "Unbilled": "#EF4444"},
                 text_auto=True
             )
@@ -1010,7 +1012,7 @@ with t_col3:
     )
 
 if search_term:
-    target_search_fields = [c for c in ["ACCT_ID", "NAME", "DIV_CODE", "DIVISION_NAME", "SERIAL_NBR", "METER_BADGE_NO", "SCNO", "KNO"] if c in table_df.columns]
+    target_search_fields = [c for c in ["DISCOM_ACCT_ID", "ACCT_ID", "NAME", "DIV_CODE", "DIVISION_NAME", "SERIAL_NBR", "METER_BADGE_NO", "SCNO", "KNO"] if c in table_df.columns]
     mask = pd.Series([False] * len(table_df), index=table_df.index)
     for c in target_search_fields:
         mask = mask | table_df[c].astype(str).str.upper().str.contains(search_term, na=False)
@@ -1018,7 +1020,7 @@ if search_term:
 
 if col_preset == "Standard Executive View":
     chosen_cols = [
-        "ACCT_ID", "NAME", "DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME",
+        "DISCOM_ACCT_ID", "ACCT_ID", "NAME", "DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME",
         "SUPPLY_TYPE", "TARIFF_CATEGORY", "LOAD", "LOAD_UNIT", "LOAD_KW", "LOAD_RANGE",
         "OPR_FLG", "BILLED_FLAG", "PAID_FLAG", "LAST_BILL_DATE",
         "CONSUMPTION_CURR_MNTH", "CURRENT_ASSESSMENT", "CA_EX_SUBS",
@@ -1026,14 +1028,14 @@ if col_preset == "Standard Executive View":
     ]
 elif col_preset == "Billing & Financial":
     chosen_cols = [
-        "ACCT_ID", "NAME", "DISCOM", "DIVISION_NAME", "SUPPLY_TYPE", "TARIFF_CATEGORY",
+        "DISCOM_ACCT_ID", "ACCT_ID", "NAME", "DISCOM", "DIVISION_NAME", "SUPPLY_TYPE", "TARIFF_CATEGORY",
         "LAST_BILL_DATE", "BILLED_FLAG", "CONSUMPTION_CURR_MNTH", "BILLED_AMOUNT",
         "CURRENT_ASSESSMENT", "CA_EX_SUBS", "ENERGY_AMT", "NON_ENERGY_AMT",
         "PAY_AMT", "TOTAL_PAY_AMT", "PAID_FLAG", "PAY_DATE", "TOTAL_OUTSTANDING", "ARREAR"
     ]
 elif col_preset == "Technical & Metering":
     chosen_cols = [
-        "ACCT_ID", "NAME", "DISCOM", "DIVISION_NAME", "LOAD", "LOAD_UNIT", "LOAD_KW", "LOAD_RANGE",
+        "DISCOM_ACCT_ID", "ACCT_ID", "NAME", "DISCOM", "DIVISION_NAME", "LOAD", "LOAD_UNIT", "LOAD_KW", "LOAD_RANGE",
         "SERIAL_NBR", "MTR_MAKE", "MTR_TYPE_CD", "MTR_CONFIG_TY_CD", "OA_CONFIG",
         "CMPRESYS_CODE", "SMART_METER_FLAG", "OPENING_READING_KWH", "CLOSING_READING_KWH",
         "CONSUMPTION_CURR_MNTH", "POWER_FACTOR", "METER_READ_REMARK"

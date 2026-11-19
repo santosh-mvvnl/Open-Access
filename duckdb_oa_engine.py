@@ -140,6 +140,15 @@ def enrich_master_dataframe(df: pd.DataFrame, master_month: str, master_year: st
     df["DISCOM"] = mapped_discom
     df["DISTRICT"] = mapped_district
 
+    # 1B. Derived Composite Key: DISCOM + ACCT_ID (Statewide Guaranteed Uniqueness)
+    if "ACCT_ID" in df.columns:
+        df["DISCOM_ACCT_ID"] = [
+            f"{str(d).strip().upper()}_{str(a).strip()}" if str(a).strip() and str(a).strip().upper() not in ("-", "NAN", "NULL", "NONE") else ""
+            for d, a in zip(df["DISCOM"], df["ACCT_ID"])
+        ]
+    else:
+        df["DISCOM_ACCT_ID"] = ""
+
     # 2. Derived BILLED_FLAG (Section 3.1)
     if "LAST_BILL_DATE" in df.columns:
         df["BILLED_FLAG"] = [
@@ -343,12 +352,12 @@ def query_master_subset(
 def calculate_kpi_summary(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Calculates the 8 standard summary indicators specified in Section 4:
-    4.1 Total Number of Consumers: Distinct ACCT_ID (excluding blank/null)
-    4.2 Number of Billed Consumers: Distinct ACCT_ID where BILLED_FLAG = 'Billed'
+    4.1 Total Number of Consumers: Distinct DISCOM + ACCT_ID (excluding blank/null)
+    4.2 Number of Billed Consumers: Distinct DISCOM + ACCT_ID where BILLED_FLAG = 'Billed'
     4.3 Sold Units: SUM of CONSUMPTION_CURR_MNTH (displayed in kWh and MU)
     4.4 CURRENT_ASSESSMENT: SUM of authentic CURRENT_ASSESSMENT
     4.5 CA_EX_SUBS: SUM of authentic CA_EX_SUBS
-    4.6 Total Payment Count: Count of paying consumers (TOTAL_PAY_AMT > 0)
+    4.6 Total Payment Count: Distinct paying consumers (DISCOM + ACCT_ID where TOTAL_PAY_AMT > 0)
     4.7 Total Payment Amount: SUM of authentic TOTAL_PAY_AMT
     4.8 Total Outstanding: SUM of authentic TOTAL_OUTSTANDING
     """
@@ -367,13 +376,13 @@ def calculate_kpi_summary(df: pd.DataFrame) -> Dict[str, Any]:
             "total_outstanding": 0.0
         }
 
-    # Distinct consumers (exclude null / empty ACCT_ID)
-    valid_acct = df[df["ACCT_ID"].notna() & (df["ACCT_ID"].astype(str).str.strip() != "")]
-    total_consumers = valid_acct["ACCT_ID"].nunique()
+    # Distinct consumers based on DISCOM + ACCT_ID composite key
+    valid_acct = df[df["ACCT_ID"].notna() & (df["ACCT_ID"].astype(str).str.strip() != "") & (df["ACCT_ID"].astype(str).str.strip().str.upper() != "NAN")]
+    total_consumers = int(valid_acct.groupby(["DISCOM", "ACCT_ID"]).ngroups) if not valid_acct.empty else 0
 
     # Billed consumers
     billed_df = valid_acct[valid_acct["BILLED_FLAG"] == "Billed"]
-    billed_consumers = billed_df["ACCT_ID"].nunique()
+    billed_consumers = int(billed_df.groupby(["DISCOM", "ACCT_ID"]).ngroups) if not billed_df.empty else 0
     unbilled_consumers = max(0, total_consumers - billed_consumers)
     billing_ratio = (billed_consumers / total_consumers * 100.0) if total_consumers > 0 else 0.0
 
@@ -384,8 +393,9 @@ def calculate_kpi_summary(df: pd.DataFrame) -> Dict[str, Any]:
     ca_amt = float(df["CURRENT_ASSESSMENT"].sum()) if "CURRENT_ASSESSMENT" in df.columns else 0.0
     ca_ex_subs_amt = float(df["CA_EX_SUBS"].sum()) if "CA_EX_SUBS" in df.columns else 0.0
 
-    paying_records = df[df["PAID_FLAG"] == "Paid"]
-    payment_count = int(len(paying_records))
+    # Paying consumers (distinct DISCOM + ACCT_ID with PAID_FLAG == 'Paid')
+    paying_records = valid_acct[valid_acct["PAID_FLAG"] == "Paid"]
+    payment_count = int(paying_records.groupby(["DISCOM", "ACCT_ID"]).ngroups) if not paying_records.empty else 0
     payment_amount = float(df["TOTAL_PAY_AMT"].sum()) if "TOTAL_PAY_AMT" in df.columns else 0.0
     total_outstanding = float(df["TOTAL_OUTSTANDING"].sum()) if "TOTAL_OUTSTANDING" in df.columns else 0.0
 
