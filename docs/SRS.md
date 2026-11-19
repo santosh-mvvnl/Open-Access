@@ -14,6 +14,7 @@
 The **Open Access Consumers & Billing Revenue Analysis Dashboard** is an enterprise-grade analytical system developed to ingest, process, and evaluate monthly master billing registers across Uttar Pradesh electricity distribution companies. The system extracts and analyzes consumer-level billing status, energy consumption, revenue assessment, realization collections, and outstanding dues using authoritative master data maintained in monthly archives.
 
 Key architectural tenets:
+4. **OA Config & OPR_FLAG Pre-selection:** Initial portal load targets active Open Access consumers, displaying `5. OPR_FLAG` pre-selected to `['Y']` and `9. OA Config` pre-selected to `['YES']`, with instant zero-latency widget synchronization across all 22 filters.
 - **Rule #7 Compliance (22 Contextual AutoFilters Above Summaries):** Clean horizontal filter bar positioned directly above the KPI summary cards with popovers, top search input, persistent committed base snapshot, manual search selection with explicit `Add current selection to filter` branching, master selection checkboxes, and persistent state across all 22 authentic dimensions.
 - **Rule #6 Compliance (Summary Hyperlinks & Strict 1:1 Parity):** Every displayed summary metric links directly to the detailed consumer dossier, preserving exact 1:1 row count parity.
 - **Rule #8 Compliance (Indian Number Formatting):** Indian comma grouping (`1,00,000`, `10,00,000`, `1,00,00,000`) applied universally across cards, tables, tooltips, and exports.

@@ -46,8 +46,9 @@ graph TD
 
 The filter engine implements Microsoft Excel AutoFilter semantics down to the exact paragraph of `global.md`:
 1. **Adjacent Checkboxes:** Display individual checkboxes positioned immediately adjacent to each option.
-2. **Default State — All Checked:** Default to all options checked (`value=True`) initially so the entire dataset is in scope.
-3. **Top Search Box:** Positioned permanently at the top of each popover.
+2. **Default State — All Checked (with Targeted Pre-selections):** Default to all options checked (`value=True`) initially so the entire dataset is in scope. For domain-targeted initial scopes (such as Open Access), corresponding filters (`5. OPR_FLAG = ['Y']` and `9. OA Config = ['YES']`) are pre-selected to immediately present the 526 active Open Access consumers, while remaining fully configurable.
+3. **Instant Zero-Latency Synchronization:** Synchronizes incoming Streamlit widget states into the selection state dictionary prior to badge formatting and data filtering, ensuring every filter change is instantaneously reflected without waiting for subsequent filter interactions.
+4. **Top Search Box:** Positioned permanently at the top of each popover.
 4. **Manual Search Selection with Explicit Add-to-Filter Branching:**
    - Newly matching options and `(Select All Search Results)` are presented **unchecked by default**.
    - If `Add current selection to filter` is unchecked (default): Isolates strictly to the newly selected search items.

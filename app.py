@@ -296,11 +296,12 @@ if df_full is None or df_full.empty:
 def render_excel_autofilter_popover(
     label: str,
     available_options: List[Any],
-    filter_key: str
+    filter_key: str,
+    default_selected: Optional[List[Any]] = None
 ) -> List[Any]:
     """
     Renders an AutoFilter popover conforming strictly to Rule #7:
-    - Default State — All Checked: Default to all options checked (value=True) initially.
+    - Default State — All Checked: Default to all options checked (value=True) initially (or default_selected if specified).
     - Top Search Box (Excel AutoFilter Style): Positioned permanently at the top.
     - Manual Search Selection with Explicit Add-to-Filter Branching:
       * When search is entered, newly matching options & (Select All Search Results) are unchecked by default.
@@ -312,19 +313,103 @@ def render_excel_autofilter_popover(
     - (Select All) Checkbox When Search is Empty: Master toggle for scope.
     - Pure Master Checkbox Bulk Selection: Driven exclusively via master checkboxes without internal push buttons.
     - Independent Filter State Isolation: Never resets or invalidates other filters.
+    - Instant Zero-Latency Synchronization: Syncs widget state before badge and downstream calculation on the current turn.
     """
     state_store = st.session_state.filter_states
     snapshots = st.session_state.search_snapshots
 
-    # 1. Initialize persistent committed base (Default: All Checked)
+    # 1. Initialize persistent committed base
     if filter_key not in state_store:
-        state_store[filter_key] = {str(opt): True for opt in available_options}
+        if default_selected is not None:
+            def_set = {str(x) for x in default_selected}
+            state_store[filter_key] = {str(opt): (str(opt) in def_set) for opt in available_options}
+        else:
+            state_store[filter_key] = {str(opt): True for opt in available_options}
         
     choice_dict = state_store[filter_key]
     for opt in available_options:
         s_opt = str(opt)
         if s_opt not in choice_dict:
-            choice_dict[s_opt] = True
+            if default_selected is not None:
+                choice_dict[s_opt] = (s_opt in {str(x) for x in default_selected})
+            else:
+                choice_dict[s_opt] = True
+
+    # 2. IMMEDIATE WIDGET-STATE SYNCHRONIZATION (BEFORE BADGE & RENDERING)
+    # Check if (Select All) master was toggled
+    master_key = f"{filter_key}_chk_master_all"
+    prev_master_key = f"{filter_key}_prev_master"
+
+    if master_key in st.session_state:
+        curr_master = st.session_state[master_key]
+        prev_master = st.session_state.get(prev_master_key, curr_master)
+        if curr_master != prev_master:
+            # User clicked master checkbox!
+            for opt in available_options:
+                s_opt = str(opt)
+                choice_dict[s_opt] = curr_master
+                st.session_state[f"{filter_key}_item_{s_opt}"] = curr_master
+            st.session_state[prev_master_key] = curr_master
+        else:
+            # Sync individual item checkboxes into choice_dict
+            for opt in available_options:
+                s_opt = str(opt)
+                item_key = f"{filter_key}_item_{s_opt}"
+                if item_key in st.session_state:
+                    choice_dict[s_opt] = bool(st.session_state[item_key])
+                else:
+                    st.session_state[item_key] = choice_dict.get(s_opt, True)
+    else:
+        # Initial run or after reset: pre-seed item widget keys
+        for opt in available_options:
+            s_opt = str(opt)
+            item_key = f"{filter_key}_item_{s_opt}"
+            if item_key in st.session_state:
+                choice_dict[s_opt] = bool(st.session_state[item_key])
+            else:
+                st.session_state[item_key] = choice_dict.get(s_opt, True)
+
+    # Search Mode widget sync
+    search_query = st.session_state.get(f"{filter_key}_search_txt", "").strip()
+    if search_query:
+        q_lower = search_query.lower()
+        matching_options = [opt for opt in available_options if q_lower in str(opt).lower()]
+        search_dict_key = f"{filter_key}_search_items_{search_query}"
+        if search_dict_key in st.session_state:
+            search_choices = st.session_state[search_dict_key]
+            search_master_key = f"{filter_key}_chk_search_master"
+            prev_sm_key = f"{filter_key}_prev_search_master"
+            if search_master_key in st.session_state:
+                curr_sm = st.session_state[search_master_key]
+                prev_sm = st.session_state.get(prev_sm_key, curr_sm)
+                if curr_sm != prev_sm:
+                    for opt in matching_options:
+                        s_opt = str(opt)
+                        search_choices[s_opt] = curr_sm
+                        st.session_state[f"{filter_key}_sitem_{s_opt}"] = curr_sm
+                    st.session_state[prev_sm_key] = curr_sm
+                else:
+                    for opt in matching_options:
+                        s_opt = str(opt)
+                        sitem_key = f"{filter_key}_sitem_{s_opt}"
+                        if sitem_key in st.session_state:
+                            search_choices[s_opt] = bool(st.session_state[sitem_key])
+            add_to_filter = st.session_state.get(f"{filter_key}_add_merge_chk", False)
+            base_snap = snapshots.get(filter_key, dict(choice_dict))
+            if add_to_filter:
+                for opt in available_options:
+                    s_opt = str(opt)
+                    if s_opt in search_choices:
+                        choice_dict[s_opt] = base_snap.get(s_opt, False) or search_choices[s_opt]
+                    else:
+                        choice_dict[s_opt] = base_snap.get(s_opt, False)
+            else:
+                for opt in available_options:
+                    s_opt = str(opt)
+                    choice_dict[s_opt] = search_choices.get(s_opt, False)
+            for opt in available_options:
+                s_opt = str(opt)
+                st.session_state[f"{filter_key}_item_{s_opt}"] = choice_dict[s_opt]
 
     # Current committed selections
     active_checked = [opt for opt in available_options if choice_dict.get(str(opt), True)]
@@ -332,7 +417,7 @@ def render_excel_autofilter_popover(
     n_sel = len(active_checked)
 
     # Dynamic status badge
-    if n_sel == total_opts:
+    if n_sel == total_opts and total_opts > 0:
         badge = "(All)"
     elif n_sel == 0:
         badge = "(None)"
@@ -340,6 +425,7 @@ def render_excel_autofilter_popover(
         badge = f"({n_sel}/{total_opts})"
 
     popover_label = f"{label}: {badge}"
+    st.session_state[prev_master_key] = (n_sel == total_opts)
 
     with st.popover(popover_label, use_container_width=True):
         st.markdown(f"**Filter by {label}**")
@@ -396,11 +482,7 @@ def render_excel_autofilter_popover(
                     key=f"{filter_key}_chk_search_master",
                     value=is_all_search_checked
                 )
-                prev_search_master = st.session_state.get(f"{filter_key}_prev_search_master", is_all_search_checked)
-                if chk_all_search != prev_search_master:
-                    for opt in matching_options:
-                        search_choices[str(opt)] = chk_all_search
-                    st.session_state[f"{filter_key}_prev_search_master"] = chk_all_search
+                st.session_state[f"{filter_key}_prev_search_master"] = chk_all_search
 
                 st.markdown("<hr style='margin: 4px 0 6px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
 
@@ -433,14 +515,10 @@ def render_excel_autofilter_popover(
                 is_all_checked = (n_sel == total_opts)
                 chk_select_all = st.checkbox(
                     f"(Select All) [{total_opts}]",
-                    key=f"{filter_key}_chk_master_all",
+                    key=master_key,
                     value=is_all_checked
                 )
-                prev_master = st.session_state.get(f"{filter_key}_prev_master", is_all_checked)
-                if chk_select_all != prev_master:
-                    for opt in available_options:
-                        choice_dict[str(opt)] = chk_select_all
-                    st.session_state[f"{filter_key}_prev_master"] = chk_select_all
+                st.session_state[prev_master_key] = chk_select_all
 
                 st.markdown("<hr style='margin: 4px 0 6px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
 
@@ -467,33 +545,33 @@ with b1_c1:
     avail_discoms = sorted([d for d in df_full["DISCOM"].dropna().unique() if str(d).strip()])
     sel_discoms = render_excel_autofilter_popover("1. DISCOM", avail_discoms, "af_discom")
 
-df_step1 = df_full[df_full["DISCOM"].isin(sel_discoms)] if sel_discoms else df_full
+df_step1 = df_full[df_full["DISCOM"].isin(sel_discoms)] if len(sel_discoms) < len(avail_discoms) else df_full
 
 with b1_c2:
     avail_zones = sorted([z for z in df_step1["ZONE_NAME"].dropna().unique() if str(z).strip()])
     sel_zones = render_excel_autofilter_popover("2. Zone", avail_zones, "af_zone")
 
-df_step2 = df_step1[df_step1["ZONE_NAME"].isin(sel_zones)] if sel_zones else df_step1
+df_step2 = df_step1[df_step1["ZONE_NAME"].isin(sel_zones)] if len(sel_zones) < len(avail_zones) else df_step1
 
 with b1_c3:
     avail_circles = sorted([c for c in df_step2["CIRCLE_NAME"].dropna().unique() if str(c).strip()])
     sel_circles = render_excel_autofilter_popover("3. Circle", avail_circles, "af_circle")
 
-df_step3 = df_step2[df_step2["CIRCLE_NAME"].isin(sel_circles)] if sel_circles else df_step2
+df_step3 = df_step2[df_step2["CIRCLE_NAME"].isin(sel_circles)] if len(sel_circles) < len(avail_circles) else df_step2
 
 with b1_c4:
     avail_divs = sorted([d for d in df_step3["DIVISION_NAME"].dropna().unique() if str(d).strip()])
     sel_divs = render_excel_autofilter_popover("4. Division", avail_divs, "af_division")
 
-df_admin = df_step3[df_step3["DIVISION_NAME"].isin(sel_divs)] if sel_divs else df_step3
+df_admin = df_step3[df_step3["DIVISION_NAME"].isin(sel_divs)] if len(sel_divs) < len(avail_divs) else df_step3
 
 # Band 2: Operational, Billing & Technical Flags (Filters 5 to 11)
 st.markdown("<div class='filter-band-header'>⚡ Band 2: Operational, Billing & Technical Status (Filters 5 to 11)</div>", unsafe_allow_html=True)
 b2_c1, b2_c2, b2_c3, b2_c4, b2_c5, b2_c6, b2_c7 = st.columns(7)
 
 with b2_c1:
-    avail_opr = sorted([str(o) for o in df_admin["OPR_FLG"].dropna().unique() if str(o).strip()])
-    sel_opr = render_excel_autofilter_popover("5. OPR_FLAG", avail_opr, "af_opr")
+    avail_opr = sorted(list(set(["Y", "N"]).union(set(str(o) for o in df_admin["OPR_FLG"].dropna().unique() if str(o).strip()))))
+    sel_opr = render_excel_autofilter_popover("5. OPR_FLAG", avail_opr, "af_opr", default_selected=["Y"])
 
 with b2_c2:
     avail_tariff = sorted([str(t) for t in df_admin["TARIFF_CATEGORY"].dropna().unique() if str(t).strip()])
@@ -509,7 +587,7 @@ with b2_c4:
 
 with b2_c5:
     avail_oa = ["YES", "NO"]
-    sel_oa = render_excel_autofilter_popover("9. OA Config", avail_oa, "af_oa")
+    sel_oa = render_excel_autofilter_popover("9. OA Config", avail_oa, "af_oa", default_selected=["YES"])
 
 with b2_c6:
     avail_sm = ["YES", "NO"]
@@ -574,50 +652,53 @@ with b3_r2_c5:
 
 with b3_r2_c6:
     st.write("")
-    if st.button("🔄 Reset All 22 Filters", use_container_width=True, help="Reset all 22 AutoFilters to default state (All Checked)"):
+    if st.button("🔄 Reset All 22 Filters", use_container_width=True, help="Reset all 22 AutoFilters to initial default state"):
         st.session_state.filter_states = {}
         st.session_state.search_snapshots = {}
         st.session_state.drilldown_filter = "All"
+        for k in list(st.session_state.keys()):
+            if k.startswith("af_"):
+                del st.session_state[k]
         st.rerun()
 
 # ----------------- APPLY ACTIVE FILTERS ACROSS ALL 22 DIMENSIONS -----------------
 active_df = df_admin.copy()
 
-if sel_opr:
+if len(sel_opr) < len(avail_opr):
     active_df = active_df[active_df["OPR_FLG"].astype(str).isin(sel_opr)]
-if sel_tariff:
+if len(sel_tariff) < len(avail_tariff):
     active_df = active_df[active_df["TARIFF_CATEGORY"].astype(str).isin(sel_tariff)]
-if sel_billed:
+if len(sel_billed) < len(avail_billed):
     active_df = active_df[active_df["BILLED_FLAG"].isin(sel_billed)]
-if sel_paid:
+if len(sel_paid) < len(avail_paid):
     active_df = active_df[active_df["PAID_FLAG"].isin(sel_paid)]
-if sel_oa:
+if len(sel_oa) < len(avail_oa):
     active_df = active_df[active_df["OA_CONFIG"].isin(sel_oa)]
-if sel_sm:
+if len(sel_sm) < len(avail_sm):
     active_df = active_df[active_df["SMART_METER_FLAG"].isin(sel_sm)]
-if sel_load_rng:
+if len(sel_load_rng) < len(present_load_rng):
     active_df = active_df[active_df["LOAD_RANGE"].isin(sel_load_rng)]
-if sel_st:
+if len(sel_st) < len(avail_st):
     active_df = active_df[active_df["SUPPLY_TYPE"].astype(str).isin(sel_st)]
-if sel_conn:
+if len(sel_conn) < len(avail_conn):
     active_df = active_df[active_df["CONNECTION_TYPE"].astype(str).isin(sel_conn)]
-if sel_cyc:
+if len(sel_cyc) < len(avail_cyc):
     active_df = active_df[active_df["BILL_CYC_CD"].astype(str).isin(sel_cyc)]
-if sel_mtype:
+if len(sel_mtype) < len(avail_mtype):
     active_df = active_df[active_df["MTR_TYPE_CD"].astype(str).isin(sel_mtype)]
-if sel_mcfg:
+if len(sel_mcfg) < len(avail_mcfg):
     active_df = active_df[active_df["MTR_CONFIG_TY_CD"].astype(str).isin(sel_mcfg)]
-if sel_make:
+if len(sel_make) < len(avail_make):
     active_df = active_df[active_df["MTR_MAKE"].astype(str).isin(sel_make)]
-if sel_mr_src:
+if len(sel_mr_src) < len(avail_mr_src):
     active_df = active_df[active_df["MR_SOURCE_CD"].astype(str).isin(sel_mr_src)]
-if sel_remark:
+if len(sel_remark) < len(avail_remark):
     active_df = active_df[active_df["METER_READ_REMARK"].astype(str).isin(sel_remark)]
-if sel_bb:
+if len(sel_bb) < len(avail_bb):
     active_df = active_df[active_df["BILL_BASIS"].astype(str).isin(sel_bb)]
-if sel_inf:
+if len(sel_inf) < len(avail_inf):
     active_df = active_df[active_df["INF_BILL"].astype(str).isin(sel_inf)]
-if sel_presys:
+if len(sel_presys) < len(avail_presys):
     active_df = active_df[active_df[ps_col].astype(str).isin(sel_presys)]
 
 # Calculate KPI Indicators
