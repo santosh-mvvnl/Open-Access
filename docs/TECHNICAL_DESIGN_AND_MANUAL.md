@@ -1,15 +1,16 @@
 # Technical Design & User Operating Manual
-## Open Access Consumers & Billing Revenue Analysis Dashboard (Version 3.0.0)
+## Open Access Consumers & Billing Revenue Analysis Dashboard (Version 4.0.0)
 
 ---
 
-### 1. Architecture Overview & 22 Filter Structure
+### 1. Architecture Overview & global.md Standards
 
 ```mermaid
 graph TD
     subgraph Storage["Authentic UPPCL Storage Layer"]
         MD["Monthly Master Data Files (.csv.gz)<br>e.g. D:\Master Data\102026"]
         MAP["Authoritative Division Mapping<br>UPPCL Division Code Mapping.xlsx"]
+        RULES[".gemini/rules/global.md<br>Authoritative Rules File"]
     end
 
     subgraph Engine["DuckDB High-Performance Vectorized Processing"]
@@ -41,44 +42,51 @@ graph TD
 
 ---
 
-### 2. The 22 Filter Implementation (Rule #7)
+### 2. Exact Implementation of Rule #7 (Excel AutoFilter Semantics)
 
-All 22 filters requested in Sections 5.1 and 5.2 are rendered in 3 horizontal bands directly above the summary cards:
-
-1. **Band 1 (4 Administrative Filters):** `DISCOM`, `Zone`, `Circle`, `Division` (Omnidirectional Cascading).
-2. **Band 2 (7 Operational & Technical Filters):** `OPR_FLAG`, `Tariff Category`, `Billed Flag`, `Paid Flag`, `OA Config`, `Smart Meter Flag`, `Load Range`.
-3. **Band 3 (11 Metering & Reading Profile Filters):** `SUPPLY_TYPE`, `TYPE_of_Connection`, `BILL_CYC_CD`, `MTR_TYPE_CD`, `MTR_CONFIG_TY_CD`, `MTR_MAKE`, `MR_SOURCE_CD`, `METER_READ_REMARK`, `BILL_BASIS`, `INF_BILL`, `PRESYS_CD`, alongside the universal **`🔄 Reset All 22 Filters`** action.
-
-Each filter popover implements Microsoft Excel AutoFilter semantics:
-- Top search input box.
-- `(Select All Search Results)` checkbox when search text is active.
-- `Add current selection to filter` checkbox for incremental searching.
-- `(Select All)` master toggle when search is empty.
-- Scrollable list with individual adjacent checkboxes for each unique option.
-- Dynamic status badge `(All)`, `(3/10)`, `(None)`.
+The filter engine implements Microsoft Excel AutoFilter semantics down to the exact paragraph of `global.md`:
+1. **Adjacent Checkboxes:** Display individual checkboxes positioned immediately adjacent to each option.
+2. **Default State — All Checked:** Default to all options checked (`value=True`) initially so the entire dataset is in scope.
+3. **Top Search Box:** Positioned permanently at the top of each popover.
+4. **Manual Search Selection with Explicit Add-to-Filter Branching:**
+   - Newly matching options and `(Select All Search Results)` are presented **unchecked by default**.
+   - If `Add current selection to filter` is unchecked (default): Isolates strictly to the newly selected search items.
+   - If `Add current selection to filter` is checked: Merges the persistent committed base snapshot with newly selected search items.
+5. **Persistent Committed Base Snapshot:** Captured before a search query begins and preserved across consecutive searches.
+6. **Pure Master Checkbox Bulk Selection:** Driven exclusively via `(Select All)` or `(Select All Search Results)`.
+7. **Independent Filter State Isolation:** Master checkboxes and toggles operate strictly on that dropdown's options without affecting other filters.
+8. **Universal Cascading:** Full omnidirectional cascading across all 22 filters.
 
 ---
 
-### 3. User Operating Manual
+### 3. User Operating Manual & Git Synchronization
 
-#### 3.1 Launching the Dashboard
-Execute:
+#### 3.1 Launching the Application
+Run the launcher:
 ```powershell
 d:\AG Project\Open Access\run_dashboard.bat
 ```
-Or start via command line:
+Or start via terminal:
 ```powershell
 python -m streamlit run app.py --server.port 8503
 ```
-Open `http://localhost:8503` in your web browser.
+Open `http://localhost:8503` in your browser.
 
-#### 3.2 Operating All 22 Filters
+#### 3.2 Operating the 22 AutoFilters Above Summaries
 1. Click any filter button in Band 1, Band 2, or Band 3.
-2. Type in the search box to find specific entities (e.g. searching for a specific meter make, division, or tariff).
-3. Use `(Select All Search Results)` or check/uncheck individual checkboxes.
-4. Click **🔄 Reset All 22 Filters** to restore every filter to the default `(All)` state.
+2. Type in the search box to filter options.
+3. Check individual items or use `(Select All Search Results)` / `Add current selection to filter`.
+4. Click **🔄 Reset All 22 Filters** to restore all filters to the default `(All)` state.
 
-#### 3.3 Drilldown & 1:1 Parity Exports
-1. Click **🔗 View All Consumers**, **🔗 Filter Billed Only**, **🔗 Filter Unbilled Only**, or **🔗 Filter Paying Only** on any summary card to filter the consumer dossier table.
-2. Search across consumer names, account IDs, or division names.
-3. Click **📥 Download Exact Records as Excel (.xlsx)** or **CSV** to save the authentic records matching the displayed summary count.
+#### 3.3 GitHub Remote Synchronization Guide (Rule #2)
+The local Git repository is initialized on branch `main` with remote origin set to `https://github.com/santosh-mvvnl/Open-Access.git`.
+To push commits to your GitHub account:
+1. Go to [https://github.com/new](https://github.com/new) and create a repository named `Open-Access` (or your preferred name).
+2. If named differently, run:
+   ```powershell
+   git remote set-url origin https://github.com/santosh-mvvnl/<your-repo-name>.git
+   ```
+3. Execute the push command:
+   ```powershell
+   git push -u origin main
+   ```

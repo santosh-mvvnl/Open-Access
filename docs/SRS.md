@@ -1,11 +1,11 @@
 # Software Requirements Specification (SRS)
 ## Open Access Consumers & Billing Revenue Analysis Dashboard
 
-**Document Version:** 3.0.0  
+**Document Version:** 4.0.0  
 **Effective Date:** November 2026  
 **System Name:** Open Access & Billing Revenue Analysis System  
 **Deployment Target:** UPPCL Electricity Distribution Companies (DVVNL, KESCO, MVVNL, PuVVNL, PVVNL)  
-**Compliance Standards:** Universal Agent Rules (`global.md`), Strict Zero Synthetic Data Policy, Rule #6 (1:1 Parity), Rule #7 (Excel AutoFilter Semantics Above Summaries across all 22 Dimensions), Rule #8 (Indian Number Formatting)
+**Compliance Standards:** Universal Agent Rules (`global.md`), Strict Zero Synthetic Data Policy, Rule #6 (1:1 Parity), Rule #7 (Exact Excel AutoFilter Semantics Above Summaries), Rule #8 (Indian Number Formatting)
 
 ---
 
@@ -14,11 +14,12 @@
 The **Open Access Consumers & Billing Revenue Analysis Dashboard** is an enterprise-grade analytical system developed to ingest, process, and evaluate monthly master billing registers across Uttar Pradesh electricity distribution companies. The system extracts and analyzes consumer-level billing status, energy consumption, revenue assessment, realization collections, and outstanding dues using authoritative master data maintained in monthly archives.
 
 Key architectural tenets:
-- **Rule #7 Compliance (22 Contextual AutoFilters Above Summaries):** Clean horizontal filter bar positioned directly above the KPI summary cards with popovers, top search input, master selection checkboxes, and persistent state across all 22 authentic dimensions.
+- **Rule #7 Compliance (22 Contextual AutoFilters Above Summaries):** Clean horizontal filter bar positioned directly above the KPI summary cards with popovers, top search input, persistent committed base snapshot, manual search selection with explicit `Add current selection to filter` branching, master selection checkboxes, and persistent state across all 22 authentic dimensions.
 - **Rule #6 Compliance (Summary Hyperlinks & Strict 1:1 Parity):** Every displayed summary metric links directly to the detailed consumer dossier, preserving exact 1:1 row count parity.
 - **Rule #8 Compliance (Indian Number Formatting):** Indian comma grouping (`1,00,000`, `10,00,000`, `1,00,00,000`) applied universally across cards, tables, tooltips, and exports.
+- **Rule #5 Compliance (Global Rules Synchronization):** `.gemini/rules/global.md` maintained inside the workspace repository.
+- **Rule #2 Compliance (Automated Git Tracking):** Clean Git version control on branch `main` configured for GitHub remote push.
 - **High-Performance DuckDB Vectorized Querying:** Direct querying over compressed `.csv.gz` archives with Parquet caching for sub-second responsiveness.
-- **Automated Period Extraction:** Folder name extraction of Master Month and Master Year with manual override controls.
 
 ---
 
@@ -56,30 +57,19 @@ All 22 filters are implemented as Excel AutoFilter popovers directly above the K
 
 ---
 
-### 3. Summary Indicators & Drilldown (Rule #6 & Rule #8)
+### 3. Traceability & Acceptance Matrix
 
-- **Total Consumers:** Distinct count of valid `ACCT_ID` in the active scope.
-- **Billed Consumers:** Distinct count of `ACCT_ID` with `BILLED_FLAG = 'Billed'`.
-- **Unbilled Consumers:** Distinct count of `ACCT_ID` with `BILLED_FLAG = 'Unbilled'`.
-- **Sold Units:** Authentic sum of `CONSUMPTION_CURR_MNTH` in kWh and Million Units (MU).
-- **Current Assessment:** Authentic sum of `CURRENT_ASSESSMENT` in Indian currency (`₹`).
-- **CA Excluding Subsidy:** Authentic sum of `CA_EX_SUBS` in Indian currency (`₹`).
-- **Total Payment Realization:** Authentic sum of `TOTAL_PAY_AMT` in Indian currency (`₹`) and count of paying consumers.
-- **Total Outstanding:** Authentic sum of `TOTAL_OUTSTANDING` in Indian currency (`₹`).
-- **Clickable Drilldown:** Clicking any summary card highlights the card and isolates the consumer dossier table to that exact cohort with strict 1:1 count parity.
-
----
-
-### 4. Traceability & Acceptance Matrix
-
-| Requirement ID | Description | Implementation File | Status |
+| Rule / Requirement | Description | Implementation File | Status |
 |---|---|---|---|
-| REQ-01 | Folder Browser & Period Extraction | `app.py`, `open_access_schema.py` | Verified |
-| REQ-02 | Derived Columns (Billed, Paid, Tariff, OA, Smart Meter, Load) | `open_access_schema.py`, `duckdb_oa_engine.py` | Verified |
-| REQ-03 | All 22 AutoFilter Popovers Above Summaries (Rule #7) | `app.py` | Verified |
-| REQ-04 | 8 Clickable KPI Indicators (Rule #6 Drilldown) | `app.py`, `duckdb_oa_engine.py` | Verified |
-| REQ-05 | 4 Graphical Analytical Suites | `app.py` | Verified |
-| REQ-06 | Consumer Dossier Table with Search & Pagination | `app.py` | Verified |
-| REQ-07 | Styled Excel & CSV Export with Strict 1:1 Count Parity | `duckdb_oa_engine.py`, `app.py` | Verified |
-| REQ-08 | Indian Number Formatting (Rule #8) | `open_access_schema.py` | Verified |
-| REQ-09 | Pure Authentic Portal Data (Rule #4) | Entire System | Verified |
+| Rule #1 | Mandatory Confirmation Before Codebase Changes | Agent Workflow | Verified |
+| Rule #2 | Automatic Git Add, Commit, and Push | `git` on branch `main` | Configured |
+| Rule #3 | Mandatory 6 Structured Response Sections | System Responses | Verified |
+| Rule #4 | Strict Zero Synthetic Data Policy | Entire System | Verified |
+| Rule #5 | Automatic Synchronization of Global Rules | `.gemini/rules/global.md` | Synchronized |
+| Rule #6 | Summary Hyperlinks and Strict 1:1 Data Parity | `app.py`, `duckdb_oa_engine.py` | Verified |
+| Rule #7 | Contextual Dropdown Filters with Checkboxes Above Summaries | `app.py` | Verified |
+| Rule #8 | Indian Number Formatting (`en-IN`) | `open_access_schema.py` | Verified |
+| Rule #9 | Avoid Hardcoding & Configurable Architecture | Entire Architecture | Verified |
+| Rule #10 | Validation, Testing, and Regression Prevention | Unit & Compilation Tests | Verified |
+| Rule #11 | Mandatory Working Procedure & Scope/Priority | Systematic Process | Verified |
+| Rule #12 | High-Performance Omnidirectional Cascading Filters | `duckdb_oa_engine.py` | Verified |
