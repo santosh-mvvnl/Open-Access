@@ -1,9 +1,9 @@
 # Technical Design & User Operating Manual
-## Open Access Consumers & Billing Revenue Analysis Dashboard
+## Open Access Consumers & Billing Revenue Analysis Dashboard (Version 2.0.0)
 
 ---
 
-### 1. Architecture Overview
+### 1. Architecture Overview & Redesigned Layout
 
 ```mermaid
 graph TD
@@ -19,12 +19,12 @@ graph TD
         CACHE["Parquet Cache Store<br>(data_cache/{folder}_oa_dataset.parquet)"]
     end
 
-    subgraph UI["Streamlit Executive Interface"]
-        CTRL["Period & Folder Browser Bar"]
-        FILT["Excel AutoFilter Cascading Engine<br>(DISCOM &rarr; Zone &rarr; Circle &rarr; Division)"]
-        KPI["8 Interactive Summary Metric Cards"]
-        CHART["Interactive Plotly Analysis Charts"]
-        TABLE["Consumer-Level Dossier Table & Excel Exporter"]
+    subgraph UI["Streamlit Executive Interface (global.md Compliant)"]
+        TOP["1. Top Header & Period Resolution Bar"]
+        FILT["2. Excel AutoFilter Bar Above Summaries (Rule #7)<br>• DISCOM &rarr; Zone &rarr; Circle &rarr; Division<br>• Tariff, Billed, Paid, OA, Smart Meter, Load Range"]
+        KPI["3. 8 Interactive Summary Cards (Rule #6 & #8)"]
+        CHART["4. Analytical Plotly Visualizations (4 Clean Tabs)"]
+        TABLE["5. Consumer Dossier Table & Styled Exporter (1:1 Parity)"]
     end
 
     MD --> SCAN
@@ -36,85 +36,56 @@ graph TD
     FILT --> KPI
     FILT --> CHART
     FILT --> TABLE
-    CTRL --> FILT
+    TOP --> FILT
 ```
 
 ---
 
-### 2. Data Schema & Derived Column Specifications
+### 2. Implementation of Universal Agent Rules (`global.md`)
 
-#### 2.1 Authentic 155 Source Columns
-The system ingests all 155 authentic UPPCL master billing register fields without modification or truncation.
+#### 2.1 Rule #7: Contextual Dropdown Filters with Checkboxes Above Summaries
+- **Horizontal Placement:** All administrative and operational filters are positioned directly above the summary indicators in a clean, uncluttered two-row grid, completely removing sidebar clutter.
+- **Top Search Box (Excel AutoFilter Standard):** Positioned permanently at the top of each filter popover for instantaneous searching.
+- **`(Select All Search Results)` & `Add current selection to filter`:** Enables searching and selective or incremental merging without clearing out-of-scope selections.
+- **`(Select All)` Checkbox:** Master toggle when search is empty, with real-time total option counts.
+- **Independent State Isolation:** Toggling selections inside one dropdown never corrupts or invalidates selections in other dimensions.
+- **Status Badges:** Each filter button displays real-time status badges: `(All)`, `(None)`, or `(3/15)`.
 
-#### 2.2 Derived Column Formulas
+#### 2.2 Rule #6: Summary Hyperlinks & Strict 1:1 Count Parity
+- Clicking any of the 8 KPI summary cards toggles an active isolation filter on the consumer dossier table below.
+- Active card is highlighted with a blue border glow.
+- Strict 1:1 count parity is verified programmatically and displayed on the table header badge before any file download.
 
-| Derived Field | Source Column(s) | Business Logic / Formula | Output Values |
-|---|---|---|---|
-| `BILLED_FLAG` | `LAST_BILL_DATE` | Date parsing matching reference month and year | `Billed`, `Unbilled` |
-| `PAID_FLAG` | `TOTAL_PAY_AMT` | Numerical check $> 0$ | `Paid`, `Unpaid` |
-| `TARIFF_CATEGORY` | `SUPPLY_TYPE` | Strict ordered precedence matching: LMV-10, LMV-11, LMV-1..9, HV-1..4 | `LMV-1` to `LMV-11`, `HV-1` to `HV-4`, `Unknown` |
-| `OA_CONFIG` | `MTR_CONFIG_TY_CD` | Case-insensitive substring match for `OA` | `YES`, `NO` |
-| `SMART_METER_FLAG` | `CMPRESYS_CODE` | Case-insensitive substring match for `MD` | `YES`, `NO` |
-| `LOAD_KW` | `LOAD`, `LOAD_UNIT` | $\lceil\text{CEIL}(\text{LOAD}) \times \text{Factor}\rceil$ where Factor: KW=1.0, KVA=0.9, BHP=0.746 | Integer KW value |
-| `LOAD_RANGE` | `LOAD_KW` | Value binning | `1-4 KW`, `5-9 KW`, `10-24 KW`, `25-50 KW`, `Above 50 KW`, `Unknown/Invalid` |
-| `DISCOM` | `DIV_CODE` | Authoritative mapping from `Major Divisions` | `DVVNL`, `KESCO`, `MVVNL`, `PuVVNL`, `PVVNL` |
-| `ZONE_NAME` | `DIV_CODE` | Authoritative mapping | Zone string (e.g., `LUCKNOW`, `MEERUT`) |
-| `CIRCLE_NAME` | `DIV_CODE` | Authoritative mapping | Circle string (e.g., `EDC AYODHYA`) |
-| `DIVISION_NAME` | `DIV_CODE` | Authoritative mapping | Division name (e.g., `EUDD I GHAZIABAD`) |
+#### 2.3 Rule #8: Indian Number Formatting
+- Centralized formatting using `format_in()` and `format_currency_dual()` applies `en-IN` comma grouping (`1,00,000`, `10,00,000`, `1,00,00,000`) across all cards, charts, table columns, and exports.
 
 ---
 
-### 3. Summary Calculations & Strict 1:1 Parity
+### 3. User Operating Manual
 
-All aggregations run against the active, filtered dataset:
-
-1. **Total Number of Consumers:**
-   $$\text{Total Consumers} = \text{COUNT}(\text{DISTINCT } \text{ACCT_ID}) \quad \forall \text{ ACCT_ID} \neq \emptyset$$
-2. **Number of Billed Consumers:**
-   $$\text{Billed Consumers} = \text{COUNT}(\text{DISTINCT } \text{ACCT_ID}) \quad \text{WHERE } \text{BILLED_FLAG} = \text{'Billed'}$$
-3. **Sold Units (Consumption):**
-   $$\text{Sold Units (kWh)} = \sum \text{CONSUMPTION\_CURR\_MNTH}, \quad \text{Sold Units (MU)} = \frac{\text{Sold Units (kWh)}}{1,000,000}$$
-4. **Current Assessment:**
-   $$\text{Current Assessment (₹)} = \sum \text{CURRENT\_ASSESSMENT}$$
-5. **CA Excluding Subsidy:**
-   $$\text{CA\_EX\_SUBS (₹)} = \sum \text{CA\_EX\_SUBS}$$
-6. **Total Payment Count:**
-   $$\text{Payment Count} = \text{COUNT}(*) \quad \text{WHERE } \text{PAID\_FLAG} = \text{'Paid'}$$
-7. **Total Payment Amount:**
-   $$\text{Payment Amount (₹)} = \sum \text{TOTAL\_PAY\_AMT}$$
-8. **Total Outstanding:**
-   $$\text{Total Outstanding (₹)} = \sum \text{TOTAL\_OUTSTANDING}$$
-
-**Mandatory 1:1 Parity Rule:** When clicking any summary card or export button, the number of records displayed in the table and downloaded in the Excel/CSV file exactly equals the displayed consumer count.
-
----
-
-### 4. User Operating Manual
-
-#### 4.1 Launching the Application
-Run the launcher script:
+#### 3.1 Launching the Application
+Execute the one-click batch launcher:
 ```powershell
-run_dashboard.bat
+d:\AG Project\Open Access\run_dashboard.bat
 ```
-Or execute directly:
+Or run directly via command line:
 ```powershell
 python -m streamlit run app.py --server.port 8503
 ```
-Open a browser and navigate to `http://localhost:8503`.
+Open `http://localhost:8503` in your web browser.
 
-#### 4.2 Selecting Master Data
-1. **Browse Folder:** Click the **📂 Browse Folder** button to launch the native Windows folder picker, or type the path into the text input box (e.g., `D:\Master Data\102026`).
-2. **Auto-Extracted Month & Year:** The dashboard automatically extracts the first 2 digits as the Master Month (e.g., `10` $\rightarrow$ October) and the last 4 digits as the Master Year (e.g., `2026`).
-3. **Manual Override:** Expand the *🛠️ Manual Period Override* expander in the sidebar if manual corrections are needed.
-4. **Load Data:** Click **🚀 Load Data** to ingest and process records.
+#### 3.2 Selecting Master Data
+1. **Browse Folder:** Click **📂 Browse** to launch the Windows native folder picker, or type any valid master data folder path (e.g., `D:\Master Data\102026`).
+2. **Auto-Extracted Month & Year:** The dashboard automatically extracts the first 2 digits as Master Month and the last 4 digits as Master Year.
+3. **Load Data:** Click **🚀 Load Data** to ingest and process records.
 
-#### 4.3 Navigating Filters
-1. **Administrative Cascading:** Select DISCOM $\rightarrow$ Zone $\rightarrow$ Circle $\rightarrow$ Division in the sidebar. Options update dynamically.
-2. **Operational Filters:** Toggle OPR_FLG, Tariff Category, Billed Flag, Paid Flag, OA Config, Smart Meter Flag, and Load Range.
-3. **Reset Filters:** Click **🔄 Reset All Filters** to restore default settings.
+#### 3.3 Operating the Excel AutoFilter Bar Above Summaries
+1. Click any filter button (e.g., **DISCOM: (All)** or **Division: (All)**) to open the AutoFilter popover.
+2. Type in the search box to find specific entities.
+3. Check individual items or use `(Select All Search Results)` / `(Select All)`.
+4. Click **🔄 Reset** to restore all filters to the default `(All)` state.
 
-#### 4.4 Drilldown & Exports
-1. Click any summary indicator card (e.g., *Billed Consumers* or *Payment Realization*) to isolate those records in the consumer dossier table.
-2. Search across accounts, consumer names, or division codes in the table search bar.
-3. Choose a column visibility preset (*Standard Executive View*, *Billing & Financial*, *Technical & Metering*, or *All Columns*).
-4. Click **📥 Download Filtered Records as Excel (.xlsx)** or **CSV** to save the authentic dataset.
+#### 3.4 Interactive Drilldown & 1:1 Parity Exports
+1. Click **🔗 View All Consumers**, **🔗 Filter Billed Only**, **🔗 Filter Unbilled Only**, or **🔗 Filter Paying Only** to filter the dossier table.
+2. Search consumer names or accounts in the table search bar.
+3. Click **📥 Download Exact Records as Excel (.xlsx)** or **CSV** to download qualifying records matching the displayed summary count.

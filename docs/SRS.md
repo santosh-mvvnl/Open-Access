@@ -1,11 +1,11 @@
 # Software Requirements Specification (SRS)
 ## Open Access Consumers & Billing Revenue Analysis Dashboard
 
-**Document Version:** 1.0.0  
+**Document Version:** 2.0.0  
 **Effective Date:** November 2026  
 **System Name:** Open Access & Billing Revenue Analysis System  
 **Deployment Target:** UPPCL Electricity Distribution Companies (DVVNL, KESCO, MVVNL, PuVVNL, PVVNL)  
-**Data Policy:** Pure Authentic Portal Data (Strict Zero Synthetic Data Policy)
+**Compliance Standards:** Universal Agent Rules (`global.md`), Strict Zero Synthetic Data Policy, Rule #6 (1:1 Parity), Rule #7 (Excel AutoFilter Semantics Above Summaries), Rule #8 (Indian Number Formatting)
 
 ---
 
@@ -13,21 +13,22 @@
 
 The **Open Access Consumers & Billing Revenue Analysis Dashboard** is an enterprise-grade analytical system developed to ingest, process, and evaluate monthly master billing registers across Uttar Pradesh electricity distribution companies. The system extracts and analyzes consumer-level billing status, energy consumption, revenue assessment, realization collections, and outstanding dues using authoritative master data maintained in monthly archives.
 
-Key goals:
-- Dynamic, generic, and configuration-driven processing without hardcoded file paths, DISCOM names, or fixed column offsets.
-- High-performance vectorized DuckDB querying directly over compressed `.csv.gz` archives.
-- Automated extraction of Master Month and Master Year from directory names with editable overrides.
-- 100% adherence to authentic portal data with strict 1:1 count parity between summary indicators and downloadable consumer dossiers.
+Key architectural tenets:
+- **Rule #7 Compliance (Contextual AutoFilters Above Summaries):** Clean horizontal filter bar positioned directly above the KPI summary cards with popovers, top search input, master selection checkboxes, and persistent state.
+- **Rule #6 Compliance (Summary Hyperlinks & Strict 1:1 Parity):** Every displayed summary metric links directly to the detailed consumer dossier, preserving exact 1:1 row count parity.
+- **Rule #8 Compliance (Indian Number Formatting):** Indian comma grouping (`1,00,000`, `10,00,000`, `1,00,00,000`) applied universally across cards, tables, tooltips, and exports.
+- **High-Performance DuckDB Vectorized Querying:** Direct querying over compressed `.csv.gz` archives with Parquet caching for sub-second responsiveness.
+- **Automated Period Extraction:** Folder name extraction of Master Month and Master Year with manual override controls.
 
 ---
 
 ### 2. Functional Requirements Specification
 
 #### 2.1 Input Controls & Master Period Resolution
-- **FR-1.1 Folder Selection:** Provide a directory path selector with both text input and a Windows native folder browser (`tkinter.filedialog.askdirectory`) to select the folder containing monthly master files (e.g., `D:\Master Data\102026`).
-- **FR-1.2 Master Month Extraction:** Automatically parse the first two digits of the selected folder name, map to calendar months (01–12), and provide manual correction controls.
-- **FR-1.3 Master Year Extraction:** Automatically extract the last four digits of the selected folder name, set as the reference year, and provide manual correction controls.
-- **FR-1.4 Reference Period Authority:** The Master Month and Master Year serve as the reference period for all billing-related evaluations.
+- **FR-1.1 Folder Selection:** Provide a directory path selector with text input and Windows native folder browser (`tkinter.filedialog.askdirectory`) to select the folder containing monthly master files (e.g., `D:\Master Data\102026`).
+- **FR-1.2 Master Month Extraction:** Automatically parse the first two digits of the selected folder name (01–12) as Master Month.
+- **FR-1.3 Master Year Extraction:** Automatically extract the last four digits of the selected folder name as Master Year.
+- **FR-1.4 Reference Period Authority:** Master Month and Master Year serve as the reference period for all billing-related evaluations.
 
 #### 2.2 Data Transformation & Derived Attributes
 - **FR-2.1 Billed Flag (`BILLED_FLAG`):**
@@ -54,20 +55,22 @@ Key goals:
   - Unit conversion: $\text{KW} = \lceil\text{LOAD}\rceil$, $\text{KVA} = \lceil\lceil\text{LOAD}\rceil \times 0.9\rceil$, $\text{BHP} = \lceil\lceil\text{LOAD}\rceil \times 0.746\rceil$.
   - Range classifications: `1-4 KW`, `5-9 KW`, `10-24 KW`, `25-50 KW`, `Above 50 KW`, and `Unknown/Invalid`.
 
-#### 2.3 Dashboard Summary Indicators
-- **FR-3.1 Total Consumers:** Distinct count of valid `ACCT_ID` in the active scope.
-- **FR-3.2 Billed Consumers:** Distinct count of `ACCT_ID` with `BILLED_FLAG = 'Billed'`.
-- **FR-3.3 Sold Units:** Authentic sum of `CONSUMPTION_CURR_MNTH` displayed in kWh and Million Units (MU).
-- **FR-3.4 Current Assessment:** Authentic sum of `CURRENT_ASSESSMENT` in Indian currency (`₹`).
-- **FR-3.5 CA Excluding Subsidy:** Authentic sum of `CA_EX_SUBS` in Indian currency (`₹`).
-- **FR-3.6 Total Payment Count:** Count of consumers with realized payments (`TOTAL_PAY_AMT > 0`).
-- **FR-3.7 Total Payment Amount:** Authentic sum of `TOTAL_PAY_AMT` in Indian currency (`₹`).
-- **FR-3.8 Total Outstanding:** Authentic sum of `TOTAL_OUTSTANDING` in Indian currency (`₹`).
+#### 2.3 Contextual Dropdown Filters with Checkboxes Above Summaries (Rule #7)
+- **FR-3.1 Layout Placement:** Filters are positioned directly above the summary indicators in two responsive rows without occupying or cluttering the sidebar.
+- **FR-3.2 Administrative Hierarchy:** Cascading `DISCOM` $\rightarrow$ `ZONE` $\rightarrow$ `CIRCLE` $\rightarrow$ `DIVISION` mapped using authoritative `UPPCL Division Code Mapping.xlsx`.
+- **FR-3.3 Operational Attributes:** `Tariff Category`, `Billed Flag`, `Paid Flag`, `OA Config`, `Smart Meter Flag`, and `Load Range`.
+- **FR-3.4 AutoFilter Semantics:** Each filter popover contains a top search box, `(Select All Search Results)`, `Add current selection to filter`, and individual checkboxes adjacent to each item with persistent state memory.
 
-#### 2.4 Multi-Dimensional Cascading Filters (Excel AutoFilter Semantics)
-- Cascading administrative hierarchy: `DISCOM` $\rightarrow$ `ZONE` $\rightarrow$ `CIRCLE` $\rightarrow$ `DIVISION` mapped using authoritative `UPPCL Division Code Mapping.xlsx`.
-- 18 Operational and technical filters: `OPR_FLG`, `TARIFF_CATEGORY`, `SUPPLY_TYPE`, `CONNECTION_TYPE`, `BILL_CYC_CD`, `MTR_TYPE_CD`, `MTR_CONFIG_TY_CD`, `MTR_MAKE`, `MR_SOURCE_CD`, `METER_READ_REMARK`, `BILL_BASIS`, `INF_BILL`, `CMPRESYS_CODE`, `OA_CONFIG`, `LOAD_RANGE`, `BILLED_FLAG`, `PAID_FLAG`, and `SMART_METER_FLAG`.
-- Omni-directional cascading: Narrowing any filter updates available options in other filters.
+#### 2.4 Dashboard Summary Indicators & Drilldown (Rule #6)
+- **FR-4.1 Total Consumers:** Distinct count of valid `ACCT_ID` in the active scope.
+- **FR-4.2 Billed Consumers:** Distinct count of `ACCT_ID` with `BILLED_FLAG = 'Billed'`.
+- **FR-4.3 Sold Units:** Authentic sum of `CONSUMPTION_CURR_MNTH` displayed in kWh and Million Units (MU).
+- **FR-4.4 Current Assessment:** Authentic sum of `CURRENT_ASSESSMENT` in Indian currency (`₹`).
+- **FR-4.5 CA Excluding Subsidy:** Authentic sum of `CA_EX_SUBS` in Indian currency (`₹`).
+- **FR-4.6 Total Payment Realization:** Authentic sum of `TOTAL_PAY_AMT` in Indian currency (`₹`) and count of paying consumers.
+- **FR-4.7 Total Outstanding:** Authentic sum of `TOTAL_OUTSTANDING` in Indian currency (`₹`).
+- **FR-4.8 Unbilled Consumers:** Distinct count of `ACCT_ID` with `BILLED_FLAG = 'Unbilled'`.
+- **FR-4.9 Clickable Drilldown:** Clicking any summary card highlights the card and isolates the consumer dossier table to that exact cohort.
 
 #### 2.5 Visualizations & Analytics
 - **Billing Analysis:** Donut chart of Billed vs Unbilled proportions, DISCOM-wise billing bars, and tariff-wise breakdowns.
@@ -84,25 +87,16 @@ Key goals:
 
 ---
 
-### 3. Non-Functional Requirements
-
-- **Performance:** Sub-second filter latency achieved through DuckDB vectorized query execution and in-memory Parquet caching.
-- **Reliability:** Graceful handling of empty `.csv.gz` files, null fields, malformed dates, and missing columns without throwing uncaught exceptions.
-- **Formatting Standards:** Indian numbering system (`en-IN` format: `1,00,000`, `10,00,000`, `1,00,00,000`) applied to all numerical figures.
-- **Authenticity:** Zero synthetic data policy strictly observed.
-
----
-
-### 4. Traceability & Acceptance Matrix
+### 3. Traceability & Acceptance Matrix
 
 | Requirement ID | Description | Implementation File | Status |
 |---|---|---|---|
 | REQ-01 | Folder Browser & Period Extraction | `app.py`, `open_access_schema.py` | Verified |
 | REQ-02 | Derived Columns (Billed, Paid, Tariff, OA, Smart Meter, Load) | `open_access_schema.py`, `duckdb_oa_engine.py` | Verified |
-| REQ-03 | 8 KPI Indicators with Clickable Drilldown | `app.py`, `duckdb_oa_engine.py` | Verified |
-| REQ-04 | Cascading Administrative & Operational Filters | `app.py` | Verified |
+| REQ-03 | Rule #7 AutoFilter Popovers Above Summaries | `app.py` | Verified |
+| REQ-04 | 8 Clickable KPI Indicators (Rule #6 Drilldown) | `app.py`, `duckdb_oa_engine.py` | Verified |
 | REQ-05 | 4 Graphical Analytical Suites | `app.py` | Verified |
 | REQ-06 | Consumer Dossier Table with Search & Pagination | `app.py` | Verified |
-| REQ-07 | Styled Excel & CSV Export with 1:1 Count Parity | `duckdb_oa_engine.py`, `app.py` | Verified |
+| REQ-07 | Styled Excel & CSV Export with Strict 1:1 Count Parity | `duckdb_oa_engine.py`, `app.py` | Verified |
 | REQ-08 | Indian Number Formatting (Rule #8) | `open_access_schema.py` | Verified |
 | REQ-09 | Pure Authentic Portal Data (Rule #4) | Entire System | Verified |
