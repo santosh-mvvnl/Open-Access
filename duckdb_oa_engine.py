@@ -414,6 +414,13 @@ def calculate_kpi_summary(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 # ----------------- ADMINISTRATIVE HIERARCHY SUMMARY AGGREGATION -----------------
+HIERARCHY_LEVEL_CHAINS = {
+    "DISCOM": ["DISCOM"],
+    "ZONE_NAME": ["DISCOM", "ZONE_NAME"],
+    "CIRCLE_NAME": ["DISCOM", "ZONE_NAME", "CIRCLE_NAME"],
+    "DIVISION_NAME": ["DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME"]
+}
+
 def calculate_admin_hierarchy_summary(
     df: pd.DataFrame,
     group_col: str = "DISCOM"
@@ -421,6 +428,7 @@ def calculate_admin_hierarchy_summary(
     """
     Computes summary metrics aggregated down to the administrative hierarchy level:
     group_col: 'DISCOM', 'ZONE_NAME', 'CIRCLE_NAME', or 'DIVISION_NAME'
+    Includes all upper-level hierarchy tiers in the aggregation and display table.
     Returns an aggregated DataFrame conforming to Rule #6 & #8.
     """
     if df.empty or group_col not in df.columns:
@@ -430,9 +438,22 @@ def calculate_admin_hierarchy_summary(
     if valid.empty:
         return pd.DataFrame()
 
+    # Determine full hierarchy lineage chain leading to target level
+    chain = HIERARCHY_LEVEL_CHAINS.get(group_col, [group_col])
+    active_chain = [col for col in chain if col in valid.columns]
+    if not active_chain:
+        active_chain = [group_col]
+
     records = []
-    for name, g in valid.groupby(group_col):
-        clean_name = str(name).strip() if name and not pd.isna(name) and str(name).strip() != "" else "Unmapped"
+    for keys, g in valid.groupby(active_chain):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+
+        row_dict = {}
+        for col_name, k_val in zip(active_chain, keys):
+            clean_k = str(k_val).strip() if k_val and not pd.isna(k_val) and str(k_val).strip() != "" else "Unmapped"
+            row_dict[col_name] = clean_k
+
         tot_c = int(g.groupby(["DISCOM", "ACCT_ID"]).ngroups)
         b_c = int(g[g["BILLED_FLAG"] == "Billed"].groupby(["DISCOM", "ACCT_ID"]).ngroups)
         unb_c = max(0, tot_c - b_c)
@@ -445,8 +466,7 @@ def calculate_admin_hierarchy_summary(
         pay_cr = round(float(g["TOTAL_PAY_AMT"].sum()) / 1e7, 2) if "TOTAL_PAY_AMT" in g.columns else 0.0
         out_cr = round(float(g["TOTAL_OUTSTANDING"].sum()) / 1e7, 2) if "TOTAL_OUTSTANDING" in g.columns else 0.0
 
-        records.append({
-            group_col: clean_name,
+        row_dict.update({
             "Total Consumers": tot_c,
             "Billed Consumers": b_c,
             "Unbilled Consumers": unb_c,
@@ -458,10 +478,13 @@ def calculate_admin_hierarchy_summary(
             "Realization (₹ Cr)": pay_cr,
             "Outstanding Dues (₹ Cr)": out_cr
         })
+        records.append(row_dict)
 
     summary_df = pd.DataFrame(records)
     if not summary_df.empty:
-        summary_df = summary_df.sort_values(by="Total Consumers", ascending=False).reset_index(drop=True)
+        # Sort hierarchically across parent and target administrative tiers
+        sort_cols = [c for c in active_chain if c in summary_df.columns]
+        summary_df = summary_df.sort_values(by=sort_cols).reset_index(drop=True)
     return summary_df
 
 # ----------------- STYLED EXCEL EXPORT GENERATOR -----------------

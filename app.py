@@ -572,7 +572,7 @@ b2_c1, b2_c2, b2_c3, b2_c4, b2_c5, b2_c6, b2_c7 = st.columns(7)
 
 with b2_c1:
     avail_opr = sorted(list(set(["Y", "N"]).union(set(str(o) for o in df_admin["OPR_FLG"].dropna().unique() if str(o).strip()))))
-    sel_opr = render_excel_autofilter_popover("5. OPR_FLAG", avail_opr, "af_opr", default_selected=["Y"])
+    sel_opr = render_excel_autofilter_popover("5. OPR_FLAG", avail_opr, "af_opr", default_selected=["Y", "N"])
 
 with b2_c2:
     avail_tariff = sorted([str(t) for t in df_admin["TARIFF_CATEGORY"].dropna().unique() if str(t).strip()])
@@ -887,9 +887,16 @@ if not admin_summary_df.empty:
     display_admin_df["Realization (₹ Cr)"] = display_admin_df["Realization (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
     display_admin_df["Outstanding Dues (₹ Cr)"] = display_admin_df["Outstanding Dues (₹ Cr)"].apply(lambda v: f"₹ {v:.2f} Cr")
 
-    # Add Reconciled Total Row at the bottom
-    tot_row = {
-        admin_grp_col: "★ TOTAL / ACTIVE SCOPE",
+    # Add Reconciled Total Row at the bottom with all active hierarchy columns
+    active_hierarchy_cols = [c for c in ["DISCOM", "ZONE_NAME", "CIRCLE_NAME", "DIVISION_NAME"] if c in admin_summary_df.columns]
+    tot_row = {}
+    for idx, c in enumerate(active_hierarchy_cols):
+        if idx == 0:
+            tot_row[c] = "★ TOTAL / ACTIVE SCOPE"
+        else:
+            tot_row[c] = "-"
+
+    tot_row.update({
         "Total Consumers": format_in(kpi["total_consumers"]),
         "Billed Consumers": format_in(kpi["billed_consumers"]),
         "Unbilled Consumers": format_in(kpi["unbilled_consumers"]),
@@ -900,7 +907,7 @@ if not admin_summary_df.empty:
         "Paying Consumers": format_in(kpi["payment_count"]),
         "Realization (₹ Cr)": f"₹ {kpi['payment_amount']/1e7:.2f} Cr",
         "Outstanding Dues (₹ Cr)": f"₹ {kpi['total_outstanding']/1e7:.2f} Cr"
-    }
+    })
     display_admin_df = pd.concat([display_admin_df, pd.DataFrame([tot_row])], ignore_index=True)
 
     st.dataframe(
@@ -908,7 +915,7 @@ if not admin_summary_df.empty:
         use_container_width=True,
         hide_index=True
     )
-    st.caption(f"✓ Displaying summary breakdown across {len(admin_summary_df)} {selected_admin_display} administrative units reconciling 100% with KPI indicators.")
+    st.caption(f"✓ Displaying summary breakdown across {len(admin_summary_df)} {selected_admin_display} administrative units with complete upper-level hierarchy reconciling 100% with KPI indicators.")
 
 # ----------------- 4. VISUALIZATIONS SECTION (UNCLUTTERED TABS) -----------------
 st.markdown("<hr style='margin: 12px 0 16px 0; border: none; border-top: 1px solid #334155;'/>", unsafe_allow_html=True)
